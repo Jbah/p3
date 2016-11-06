@@ -16,8 +16,11 @@ def server_init()
   loop do
    client = server.accept    # Wait for a client to connect
     print "Connected"
-   result = client.gets.chomp + " 1\n"
-   first_stdin, wait_thr = Open3.pipeline_w(result)
+    line = client.gets.chomp + " 1\n"
+    line = line.strip()
+    arr = line.split(' ')
+    edgeb(arr[1..4])
+  # first_stdin, wait_thr = Open3.pipeline_w(result)
    client.close
   end
 end
@@ -27,12 +30,13 @@ def edgeb(cmd)
   
   $rout_tbl[cmd[2]] = [cmd[1],1]
   print cmd
-  sockfd = TCPSocket.new '127.0.0.1', $file_data[cmd[2]] #FIX LOCALHOST
-  if cmd.length < 4 then
+  if cmd.length < 4
+    sockfd = TCPSocket.new cmd[1], $file_data[cmd[2]]
     to_send = "EDGEB " + cmd[1] + " " + cmd[0] + " " + $hostname + "\n"
     sockfd.puts to_send
+    sockfd.close 
   end
-  sockfd.close  
+   
 
 end
 
@@ -87,7 +91,8 @@ def main()
   
   
 
-	while(line = STDIN.gets())
+  while(line = STDIN.gets())
+   
 		line = line.strip()
 		arr = line.split(' ')
 		cmd = arr[0]
