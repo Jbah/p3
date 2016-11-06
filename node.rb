@@ -51,8 +51,17 @@ def dumptable(cmd)
 end
 
 def shutdown(cmd)
-	STDOUT.puts "SHUTDOWN: not implemented"
-	exit(0)
+  STDOUT.close
+  STDIN.close
+  STDERR.close
+  if $server
+    $server.close
+  end
+  if $sockfd
+    $sockfd.close
+  end
+  #STDOUT.puts "SHUTDOWN: not implemented"
+  exit(0)
 end
 
 
