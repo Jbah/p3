@@ -7,13 +7,16 @@ $port = nil
 $hostname = nil
 $file_data = Hash.new
 $rout_tbl = Hash.new
+$server = nil
+$sockfd = nil
+
 
 
 
 # --------------------- Part 0 --------------------- # 
 
 def server_init()
-  server = TCPServer.new $port.to_i
+  $server = TCPServer.new $port.to_i
   loop do
    client = server.accept    # Wait for a client to connect
     print "Connected"
@@ -32,10 +35,10 @@ def edgeb(cmd)
   $rout_tbl[cmd[2]] = [cmd[1],1]
   print cmd
   if cmd.length < 4
-    sockfd = TCPSocket.new cmd[1], $file_data[cmd[2]]
+    $sockfd = TCPSocket.new cmd[1], $file_data[cmd[2]]
     to_send = "EDGEB " + cmd[1] + " " + cmd[0] + " " + $hostname + "\n"
-    sockfd.puts to_send
-    sockfd.close 
+    $sockfd.puts to_send
+    $sockfd.close
   end
    
 
