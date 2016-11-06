@@ -1,5 +1,6 @@
 require 'socket'
 require 'open3'
+require 'csv'
 
 
 $port = nil
@@ -41,7 +42,12 @@ def edgeb(cmd)
 end
 
 def dumptable(cmd)
-	puts "DUMPTABLE: not implemented"
+  
+  f = File.open(cmd[0][2..-1],"w")
+  $rout_tbl.each do |key, array|
+    f.write("#{$hostname}" + ",#{key}" + ",#{key}" + ",#{array[1]}")
+  end
+
 end
 
 def shutdown(cmd)
