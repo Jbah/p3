@@ -17,16 +17,23 @@ $sockfd = nil
 
 def server_init()
   $server = TCPServer.new $port.to_i
-  loop do
-   client = server.accept    # Wait for a client to connect
-    print "Connected"
-    line = client.gets.chomp + " 1\n"
-    line = line.strip()
-    arr = line.split(' ')
-    edgeb(arr[1..4])
-  # first_stdin, wait_thr = Open3.pipeline_w(result)
-   client.close
-  end
+  # loop do
+  #  client = server.accept    # Wait for a client to connect
+  #   line = client.gets.chomp + " 1\n"
+  #   line = line.strip()
+  #   arr = line.split(' ')
+  #   edgeb(arr[1..4])
+  # # first_stdin, wait_thr = Open3.pipeline_w(result)
+  #  client.close
+  # end
+  loop{
+    Thread.start(server.accept) do |client|
+      line = client.gets.chomp + " 1\n"
+      line = line.strip()
+      arr = line.split(' ')
+      edgeb(arr[1..4])
+    end
+  }
 end
 
 
