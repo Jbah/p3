@@ -16,21 +16,26 @@ $sockfd = nil
 # --------------------- Part 0 --------------------- # 
 
 def server_init()
+   
   $server = TCPServer.new $port.to_i
+  
   # loop do
-  #  client = server.accept    # Wait for a client to connect
-  #   line = client.gets.chomp + " 1\n"
-  #   line = line.strip()
-  #   arr = line.split(' ')
-  #   edgeb(arr[1..4])
-  # # first_stdin, wait_thr = Open3.pipeline_w(result)
-  #  client.close
-  # end
-  loop{
-    Thread.start(server.accept) do |client|
+
+   # client = $server.accept    # Wait for a client to connect
+    # print "Connected"
+    # line = client.gets.chomp + " 1\n"
+    # line = line.strip()
+    # arr = line.split(' ')
+    # edgeb(arr[1..4])
+   # first_stdin, wait_thr = Open3.pipeline_w(result)
+   # client.close
+ # end
+  loop {
+    Thread.start($server.accept) do |client|
+      print "Connected"
       line = client.gets.chomp + " 1\n"
       line = line.strip()
-      arr = line.split(' ')
+     arr = line.split(' ')
       edgeb(arr[1..4])
     end
   }
@@ -38,11 +43,11 @@ end
 
 
 def edgeb(cmd)
-  
   $rout_tbl[cmd[2]] = [cmd[1],1]
-  print cmd
   if cmd.length < 4
-    $sockfd = TCPSocket.new cmd[1], $file_data[cmd[2]]
+    
+    $sockfd = TCPSocket.new '127.0.0.1', $file_data[cmd[2]]
+    
     to_send = "EDGEB " + cmd[1] + " " + cmd[0] + " " + $hostname + "\n"
     $sockfd.puts to_send
     $sockfd.close
