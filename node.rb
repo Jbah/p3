@@ -1,7 +1,7 @@
 require 'socket'
 require 'open3'
 require 'csv'
-
+require 'thread'
 
 $port = nil
 $hostname = nil
@@ -9,7 +9,7 @@ $file_data = Hash.new
 $rout_tbl = Hash.new
 $server = nil
 $sockfd = nil
-
+$mutex = Mutex.new
 
 
 
@@ -43,7 +43,11 @@ end
 
 
 def edgeb(cmd)
-  $rout_tbl[cmd[2]] = [cmd[1],1]
+  # HAS NOT BEEN TESTEDß
+  $mutex.synchronize do
+    $rout_tbl[cmd[2]] = [cmd[1],1]
+  end
+
   if cmd.length < 4
     
     $sockfd = TCPSocket.new '127.0.0.1', $file_data[cmd[2]]
