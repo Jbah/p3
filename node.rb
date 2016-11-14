@@ -43,11 +43,12 @@ end
 
 
 def edgeb(cmd)
-  # HAS NOT BEEN TESTEDß
+  # HAS NOT BEEN TESTED
+  ################################
   $mutex.synchronize do
     $rout_tbl[cmd[2]] = [cmd[1],1]
   end
-
+  #################################
   if cmd.length < 4
     
     $sockfd = TCPSocket.new '127.0.0.1', $file_data[cmd[2]]
