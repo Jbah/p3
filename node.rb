@@ -47,6 +47,10 @@ def server_init()
         arr = line.split("\t")
         #get hash of neighbors and weights of sender
         linkstate_hash = JSON.parse(arr.last)
+        # get sender and sender sequence number
+        sender = arr[1]
+        sender_seq_num = arr[2]
+        #TODO properly handle sequence numbers
       end
 
     end
@@ -121,7 +125,7 @@ def send_link_state()
   $connections.each do |key,connection|
       neighbors[key] = $rout_tbl[key][1]
   end
-  to_send = "LINKSTATE" + "\t" + "#{$sequence_number}" + "\t" + "#{hostname}" + "\t" + "#{neighbors.to_json}" + "\n"
+  to_send = "LINKSTATE" + "\t" + "#{$hostname}"  + "#{$sequence_number}" + "\t" + "\t" + "#{neighbors.to_json}" + "\n"
   $connections.each do |key,connection|
     connection.puts to_send
   end
