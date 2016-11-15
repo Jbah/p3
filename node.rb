@@ -2,6 +2,11 @@ require 'socket'
 require 'open3'
 require 'csv'
 require 'thread'
+#require '/rgl-master/lib/rgl/adjacency'
+require 'dijkstra/dijkstra'
+require 'dijkstra/node'
+require 'dijkstra/edge'
+require 'dijkstra/graph'
 
 $port = nil
 $hostname = nil
@@ -10,7 +15,8 @@ $rout_tbl = Hash.new
 $server = nil
 $sockfd = nil
 $mutex = Mutex.new
-
+$sequence_number = 0
+$topography = Graph.new
 
 
 # --------------------- Part 0 --------------------- # 
@@ -51,7 +57,7 @@ def edgeb(cmd)
   #################################
   if cmd.length < 4
     
-    $sockfd = TCPSocket.new '127.0.0.1', $file_data[cmd[2]]
+    $sockfd = TCPSocket.new cmd[1], $file_data[cmd[2]]
     
     to_send = "EDGEB " + cmd[1] + " " + cmd[0] + " " + $hostname + "\n"
     $sockfd.puts to_send
@@ -86,7 +92,14 @@ end
 
 
 
-# --------------------- Part 1 --------------------- # 
+# --------------------- Part 1 --------------------- #
+
+def send_link_state()
+  #send
+  #for
+
+end
+
 def edged(cmd)
 	STDOUT.puts "EDGED: not implemented"
 end
