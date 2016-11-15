@@ -91,7 +91,7 @@ def edged(cmd)
 	STDOUT.puts "EDGED: not implemented"
 end
 
-def edgew(cmd)
+def edgeu(cmd)
 	STDOUT.puts "EDGEW: not implemented"
 end
 
@@ -135,7 +135,7 @@ def main()
 		case cmd
 		when "EDGEB"; edgeb(args)
 		when "EDGED"; edged(args)
-		when "EDGEW"; edgew(args)
+		when "EDGEU"; edgeu(args)
 		when "DUMPTABLE"; dumptable(args)
 		when "SHUTDOWN"; shutdown(args)
 		when "STATUS"; status()
