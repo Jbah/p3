@@ -127,7 +127,7 @@ def send_link_state()
   $connections.each do |key,connection|
       neighbors[key] = $rout_tbl[key][1]
   end
-  to_send = "LINKSTATE" + "\t" + "#{$hostname}"  + "#{$sequence_number}" + "\t" + "\t" + "#{neighbors.to_json}" + "\n"
+  to_send = "LINKSTATE" + "\t" + "#{$hostname}" + "\t" + "#{$sequence_number}"  + "\t" + "#{neighbors.to_json}" + "\n"
   $connections.each do |key,connection|
     connection.puts to_send
   end
