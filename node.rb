@@ -13,7 +13,6 @@ $port = nil
 $hostname = nil
 $file_data = Hash.new
 #Also https://en.wikipedia.org/wiki/Link-state_routing_protocol#Distributing_maps
-#TODO: Change format to match https://en.wikipedia.org/wiki/Routing_table#Contents_of_routing_tables
 $rout_tbl = Hash.new
 #$neighbors = Hash.new # Stores only neighbors
 
@@ -33,7 +32,6 @@ $topography = Graph.new # local graph of topography
 # --------------------- Part 0 --------------------- # 
 
 def server_init()
-   
   $server = TCPServer.new $port.to_i
   loop {
     Thread.start($server.accept) do |client|
@@ -52,7 +50,6 @@ def server_init()
         # get sender and sender sequence number
         sender = arr[1]
         sender_seq_num = arr[2]
-        #TODO properly handle sequence numbers
       end
 
     end
@@ -66,9 +63,7 @@ def edgeb(cmd)
   ################################
   $mutex.synchronize do
     # update routing table, neighbors, and topography
-    $rout_tbl[cmd[2]] = [cmd[1],1]
-    $neighbors[cmd[2]] = [cmd[1],1]
-    # Add neighbors to topography with weight initialized to one
+    $rout_tbl[cmd[2]] = [cmd[1],1,-1]
     $nodes[cmd[2]] = Node.new(cmd[2])
     $topography.add_node($nodes[cmd[2]])
     $topography.add_edge($nodes[$hostname],$nodes[cmd[2]],1)
@@ -120,17 +115,26 @@ end
 
 # --------------------- Part 1 --------------------- #
 
+def update_topography(link_state_hash, seq_number, sender)
+  #TODO update sequence number
+  #TODO update $topography with edges from sender to link_state_hash
+  #TODO pass link_state_mssg to neighbors
+  #TODO Dijkstras
+  #TODO Update routing table
+end
+
 # Send link state update to all neighbors
 def send_link_state()
   #create and populate hash of neighbors to send with link state message
   neighbors = Hash.new()
   $connections.each do |key,connection|
-      neighbors[key] = $rout_tbl[key][1]
+      neighbors[key] = $rout_tbl[key]
   end
   to_send = "LINKSTATE" + "\t" + "#{$hostname}" + "\t" + "#{$sequence_number}"  + "\t" + "#{neighbors.to_json}" + "\n"
   $connections.each do |key,connection|
     connection.puts to_send
   end
+  $sequence_number+=1
 end
 
 #Both edged and edgeu need to call send_link_state
@@ -139,7 +143,7 @@ def edged(cmd)
 end
 
 def edgeu(cmd)
-	STDOUT.puts "EDGEW: not implemented"
+	STDOUT.puts "EDGEU: not implemented"
 end
 
 def status()
