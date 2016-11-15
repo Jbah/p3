@@ -14,7 +14,7 @@ $hostname = nil
 $file_data = Hash.new
 #TODO: Change format to match https://en.wikipedia.org/wiki/Routing_table#Contents_of_routing_tables
 $rout_tbl = Hash.new
-$neighbors = Hash.new # Stores only neighbors
+#$neighbors = Hash.new # Stores only neighbors
 
 $connections = Hash.new # stores open tcpconnections by dst node name
 
@@ -37,13 +37,16 @@ def server_init()
     Thread.start($server.accept) do |client|
       print "Connected"
 
-      line = client.gets.chomp + " 1\n"
-      line = line.strip()
-      arr = line.split(' ')
+      line = client.gets.chomp
       if line.include? "EDGEB"
+        line = (line + " 1\n").strip()
+        arr = line.split(' ')
         edgeb(arr[1..4])
       elsif line.include? "LINKSTATE"
         #TODO: Things here to do with updating tables. Remember to parse on tab. And figure out json
+        arr = line.split("\t")
+        #get hash of neighbors and weights of sender
+        linkstate_hash = JSON.parse(arr.last)
       end
 
     end
@@ -113,14 +116,18 @@ end
 
 # Send link state update to all neighbors
 def send_link_state()
-  to_send = "LINKSTATE" + "\t" + "#{$sequence_number}" + "\t" + "#{hostname}" + "\t" + "#{$neighbors.to_json}"
+  #create and populate hash of neighbors to send with link state message
+  neighbors = Hash.new()
+  $connections.each do |key,connection|
+      neighbors[key] = $rout_tbl[key][1]
+  end
+  to_send = "LINKSTATE" + "\t" + "#{$sequence_number}" + "\t" + "#{hostname}" + "\t" + "#{neighbors.to_json}" + "\n"
   $connections.each do |key,connection|
     connection.puts to_send
   end
 end
 
 #Both edged and edgeu need to call send_link_state
-
 def edged(cmd)
 	STDOUT.puts "EDGED: not implemented"
 end
