@@ -105,11 +105,13 @@ def shutdown(cmd)
   STDOUT.close
   STDIN.close
   STDERR.close
+  # kill listener
   if $server
     $server.close
   end
-  if $sockfd
-    $sockfd.close
+  # kill open connections
+  $connections.each do |key, connection|
+    connection.close
   end
   #STDOUT.puts "SHUTDOWN: not implemented"
   exit(0)
@@ -119,14 +121,12 @@ end
 
 # --------------------- Part 1 --------------------- #
 
+# Send link state update to all neighbors
 def send_link_state()
   to_send = "LINKSTATE" + "\t" + "\t" + "#{$sequence_number}" "#{hostname}" + "\t" + "#{$neighbors.to_json}"
   $connections.each do |key,connection|
     connection.puts to_send
   end
-end
-  #for
-
 end
 
 def edged(cmd)
