@@ -7,16 +7,24 @@ require 'dijkstra/dijkstra'
 require 'dijkstra/node'
 require 'dijkstra/edge'
 require 'dijkstra/graph'
+require 'json'
 
 $port = nil
 $hostname = nil
 $file_data = Hash.new
 $rout_tbl = Hash.new
+$neighbors = Hash.new # Stores only neighbors
+
+$connections = Hash.new # stores open tcpconnections by dst node name
+
+$nodes = Hash.new # Stores Node object by name for use with $topography
 $server = nil
-$sockfd = nil
+#$sockfd = nil
 $mutex = Mutex.new
-$sequence_number = 0
-$topography = Graph.new
+
+$sequence_number = 0 # for link state
+
+$topography = Graph.new # local graph of topography
 
 
 # --------------------- Part 0 --------------------- # 
@@ -39,10 +47,16 @@ def server_init()
   loop {
     Thread.start($server.accept) do |client|
       print "Connected"
+
       line = client.gets.chomp + " 1\n"
       line = line.strip()
-     arr = line.split(' ')
-      edgeb(arr[1..4])
+      arr = line.split(' ')
+      if line.include? "EDGEB"
+        edgeb(arr[1..4])
+      else if line.include? "LINKSTATE"
+        #TODO: Things here to do with updating tables
+      end
+
     end
   }
 end
@@ -52,16 +66,27 @@ def edgeb(cmd)
   # HAS NOT BEEN TESTED
   ################################
   $mutex.synchronize do
+    # update routing table, neighbors, and topography
     $rout_tbl[cmd[2]] = [cmd[1],1]
+    $neighbors[cmd[2]] = [cmd[1],1]
+    # Add neighbors to topography with weight initialized to one
+    $nodes[cmd[2]] = Node.new(cmd[2])
+    $topography.add_node($nodes[cmd[2]])
+    $topography.add_edge($nodes[$hostname],$nodes[cmd[2]],1)
+
   end
   #################################
+  # Store new connection in hash
+  $connections[cmd[2]] = TCPSocket.new cmd[1], $file_data[cmd[2]]
   if cmd.length < 4
     
-    $sockfd = TCPSocket.new cmd[1], $file_data[cmd[2]]
+    #$sockfd = TCPSocket.new cmd[1], $file_data[cmd[2]]
+    #$connections[cmd[2]] = TCPSocket.new cmd[1], $file_data[cmd[2]]
     
     to_send = "EDGEB " + cmd[1] + " " + cmd[0] + " " + $hostname + "\n"
-    $sockfd.puts to_send
-    $sockfd.close
+    #$sockfd.puts to_send
+    $connections[cmd[2]].puts to_send
+    #$sockfd.close
   end
    
 
@@ -95,7 +120,11 @@ end
 # --------------------- Part 1 --------------------- #
 
 def send_link_state()
-  #send
+  to_send = "LINKSTATE" + "\t" + "\t" + "#{$sequence_number}" "#{hostname}" + "\t" + "#{$neighbors.to_json}"
+  $connections.each do |key,connection|
+    connection.puts to_send
+  end
+end
   #for
 
 end
@@ -175,7 +204,8 @@ def setup(hostname, port)
   $port = port
   
   #set up ports, server, buffers
-  
+  $nodes[$hostname] = Node.new($hostname)
+  $topography.add_node($nodes[$hostname])
   Thread.new do 
     server_init 
   end
