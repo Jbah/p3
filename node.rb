@@ -12,6 +12,7 @@ require 'json'
 $port = nil
 $hostname = nil
 $file_data = Hash.new
+#TODO: Change format to match https://en.wikipedia.org/wiki/Routing_table#Contents_of_routing_tables
 $rout_tbl = Hash.new
 $neighbors = Hash.new # Stores only neighbors
 
@@ -32,18 +33,6 @@ $topography = Graph.new # local graph of topography
 def server_init()
    
   $server = TCPServer.new $port.to_i
-  
-  # loop do
-
-   # client = $server.accept    # Wait for a client to connect
-    # print "Connected"
-    # line = client.gets.chomp + " 1\n"
-    # line = line.strip()
-    # arr = line.split(' ')
-    # edgeb(arr[1..4])
-   # first_stdin, wait_thr = Open3.pipeline_w(result)
-   # client.close
- # end
   loop {
     Thread.start($server.accept) do |client|
       print "Connected"
@@ -53,8 +42,8 @@ def server_init()
       arr = line.split(' ')
       if line.include? "EDGEB"
         edgeb(arr[1..4])
-      else if line.include? "LINKSTATE"
-        #TODO: Things here to do with updating tables
+      elsif line.include? "LINKSTATE"
+        #TODO: Things here to do with updating tables. Remember to parse on tab. And figure out json
       end
 
     end
@@ -63,6 +52,7 @@ end
 
 
 def edgeb(cmd)
+  #TODO Test if this still works
   # HAS NOT BEEN TESTED
   ################################
   $mutex.synchronize do
@@ -77,12 +67,12 @@ def edgeb(cmd)
   end
   #################################
   # Store new connection in hash
-  $connections[cmd[2]] = TCPSocket.new cmd[1], $file_data[cmd[2]]
+  unless $connections.has_key?(cmd[2])
+    $connections[cmd[2]] = TCPSocket.new cmd[1], $file_data[cmd[2]]
+  end
   if cmd.length < 4
-    
     #$sockfd = TCPSocket.new cmd[1], $file_data[cmd[2]]
     #$connections[cmd[2]] = TCPSocket.new cmd[1], $file_data[cmd[2]]
-    
     to_send = "EDGEB " + cmd[1] + " " + cmd[0] + " " + $hostname + "\n"
     #$sockfd.puts to_send
     $connections[cmd[2]].puts to_send
@@ -123,11 +113,13 @@ end
 
 # Send link state update to all neighbors
 def send_link_state()
-  to_send = "LINKSTATE" + "\t" + "\t" + "#{$sequence_number}" "#{hostname}" + "\t" + "#{$neighbors.to_json}"
+  to_send = "LINKSTATE" + "\t" + "#{$sequence_number}" + "\t" + "#{hostname}" + "\t" + "#{$neighbors.to_json}"
   $connections.each do |key,connection|
     connection.puts to_send
   end
 end
+
+#Both edged and edgeu need to call send_link_state
 
 def edged(cmd)
 	STDOUT.puts "EDGED: not implemented"
