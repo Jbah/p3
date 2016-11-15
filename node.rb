@@ -12,6 +12,7 @@ require 'json'
 $port = nil
 $hostname = nil
 $file_data = Hash.new
+#Also https://en.wikipedia.org/wiki/Link-state_routing_protocol#Distributing_maps
 #TODO: Change format to match https://en.wikipedia.org/wiki/Routing_table#Contents_of_routing_tables
 $rout_tbl = Hash.new
 #$neighbors = Hash.new # Stores only neighbors
@@ -21,6 +22,7 @@ $connections = Hash.new # stores open tcpconnections by dst node name
 $nodes = Hash.new # Stores Node object by name for use with $topography
 $server = nil
 #$sockfd = nil
+#Note: May not be necessary
 $mutex = Mutex.new
 
 $sequence_number = 0 # for link state
