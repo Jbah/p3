@@ -51,7 +51,7 @@ def server_init()
         sender = arr[1]
         sender_seq_num = arr[2].to_i
         if sender_seq_num != $rout_tbl['sender'][2]
-          update_topography(linkstate_hash,sender_seq_num,sender)
+          update_topography(linkstate_hash,sender_seq_num,sender,line + "\n")
         end
       end
 
@@ -118,17 +118,19 @@ end
 
 # --------------------- Part 1 --------------------- #
 
-def update_topography(link_state_hash, seq_number, sender)
+def update_topography(link_state_hash, seq_number, sender,mesg)
   #TODO update sequence number
   #TODO update $topography with edges from sender to link_state_hash
   #TODO pass link_state_mssg to neighbors
   #TODO Dijkstras
   #TODO Update routing table
   # Update local sequence number for sender
-  $rout_tbl['sender'][2] = sender_seq_num
+  $rout_tbl['sender'][2] = seq_number
+  # add sender to $nodes if not present
   unless $nodes.has_key?(sender)
     $nodes[sender] = Node.new(sender)
   end
+  # update topography
   link_state_hash.each do |key,value|
     unless $nodes.has_key?(key)
       $nodes[key] = Node.new(key)
@@ -138,7 +140,16 @@ def update_topography(link_state_hash, seq_number, sender)
     end
 
     $topography.add_edge($nodes['sender'],nodes[key],value[1])
+  end
 
+  send_along_link_state(mesg)
+
+end
+
+# Pass on link state message rather than create it
+def send_along_link_state(mesg)
+  $connections.each do |key, connection|
+    connection.puts mesg
   end
 end
 
