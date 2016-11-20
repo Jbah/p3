@@ -166,7 +166,7 @@ end
 
 #TODO figure out when the fuck to call this shit, need timer or something to make sure all link states have propogated
 # creates dijkstra object that contains all shortest paths and update routing table
-def run_djikstras
+def run_dijkstras()
   $dijkstra = Dijkstra.new($topography, $nodes[$hostname])
   $nodes.each do |name, value|
     if name != $hostname
