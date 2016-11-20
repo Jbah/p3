@@ -11,6 +11,10 @@ class Dijkstra
     compute_shortest_path
   end
 
+  def distance_to()
+    return @distance_to
+  end
+
   def shortest_path_to(node)
     path = []
     while node != @source_node

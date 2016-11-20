@@ -5,6 +5,11 @@ class Node
     @name = name
   end
 
+
+  def == (other_node)
+    return self.name == other_node.name
+  end
+
   def adjacent_edges
     graph.edges.select{|e| e.from == self}
   end

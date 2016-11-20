@@ -5,6 +5,18 @@ class Edge
     @from, @to, @weight = from, to, weight
   end
 
+  def from()
+    return @from
+  end
+
+  def to()
+    return @to
+  end
+
+  def weight()
+    return @weight
+  end
+
   def <=>(other)
     self.weight <=> other.weight
   end

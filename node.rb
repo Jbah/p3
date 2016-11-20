@@ -49,7 +49,10 @@ def server_init()
         linkstate_hash = JSON.parse(arr.last)
         # get sender and sender sequence number
         sender = arr[1]
-        sender_seq_num = arr[2]
+        sender_seq_num = arr[2].to_i
+        if sender_seq_num != $rout_tbl['sender'][2]
+          update_topography(linkstate_hash,sender_seq_num,sender)
+        end
       end
 
     end
@@ -121,6 +124,22 @@ def update_topography(link_state_hash, seq_number, sender)
   #TODO pass link_state_mssg to neighbors
   #TODO Dijkstras
   #TODO Update routing table
+  # Update local sequence number for sender
+  $rout_tbl['sender'][2] = sender_seq_num
+  unless $nodes.has_key?(sender)
+    $nodes[sender] = Node.new(sender)
+  end
+  link_state_hash.each do |key,value|
+    unless $nodes.has_key?(key)
+      $nodes[key] = Node.new(key)
+    end
+    unless $topography.has_node?($nodes[key])
+      $topography.add_node($nodes[key])
+    end
+
+    $topography.add_edge($nodes['sender'],nodes[key],value[1])
+
+  end
 end
 
 # Send link state update to all neighbors
@@ -128,7 +147,8 @@ def send_link_state()
   #create and populate hash of neighbors to send with link state message
   neighbors = Hash.new()
   $connections.each do |key,connection|
-      neighbors[key] = $rout_tbl[key]
+    #first and second element of array into neighbors hash
+      neighbors[key] = $rout_tbl[key][0,1]
   end
   to_send = "LINKSTATE" + "\t" + "#{$hostname}" + "\t" + "#{$sequence_number}"  + "\t" + "#{neighbors.to_json}" + "\n"
   $connections.each do |key,connection|
