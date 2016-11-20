@@ -16,6 +16,7 @@ $file_data = Hash.new
 $mutex = Mutex.new
 $rout_tbl = Hash.new
 #$neighbors = Hash.new # Stores only neighbors
+$seq_number = Hash.new
 
 $connections = Hash.new # stores open tcpconnections by dst node name
 
@@ -55,7 +56,7 @@ def server_init()
         # get sender and sender sequence number
         sender = arr[1]
         sender_seq_num = arr[2].to_i
-        if sender_seq_num != $rout_tbl['sender'][2]
+        if (not $seq_number.has_key?(sender)) or sender_seq_num != $seq_number[sender]
           update_topography(linkstate_hash,sender_seq_num,sender,line + "\n")
           $current_link_state_update
         end
@@ -72,7 +73,8 @@ def edgeb(cmd)
   ################################
   $mutex.synchronize do
     # update routing table, neighbors, and topography
-    $rout_tbl[cmd[2]] = [cmd[1],1,-1]
+    $rout_tbl[cmd[2]] = [cmd[1],1]
+    $seq_number[cmd[2]] = -1
     $nodes[cmd[2]] = Node.new(cmd[2])
     $topography.add_node($nodes[cmd[2]])
     $topography.add_edge($nodes[$hostname],$nodes[cmd[2]],1)
@@ -124,14 +126,17 @@ end
 
 # --------------------- Part 1 --------------------- #
 
-def update_topography(link_state_hash, seq_number, sender,mesg)
+def update_topography(link_state_hash, seq_number, sender, mesg)
   #TODO update sequence number
   #TODO update $topography with edges from sender to link_state_hash
   #TODO pass link_state_mssg to neighbors
   #TODO Dijkstras
   #TODO Update routing table
   # Update local sequence number for sender
-  $rout_tbl['sender'][2] = seq_number
+
+  #NOTE THIS WILL NOT WORK IF $rout_tbl does not have entry for this yet.
+  #$rout_tbl['sender'][2] = seq_number
+  $seq_number[sender] = seq_number
   # add sender to $nodes if not present
   unless $nodes.has_key?(sender)
     $nodes[sender] = Node.new(sender)
@@ -145,7 +150,7 @@ def update_topography(link_state_hash, seq_number, sender,mesg)
       $topography.add_node($nodes[key])
     end
 
-    $topography.add_edge($nodes['sender'],nodes[key],value[1])
+    $topography.add_edge($nodes[sender],nodes[key],value[1])
   end
 
   send_along_link_state(mesg)
@@ -159,12 +164,15 @@ def send_along_link_state(mesg)
   end
 end
 
+#TODO figure out when the fuck to call this shit, need timer or something to make sure all link states have propogated
 # creates dijkstra object that contains all shortest paths and update routing table
 def run_djikstras
   $dijkstra = Dijkstra.new($topography, $nodes[$hostname])
   $nodes.each do |name, value|
     if name != $hostname
-      $rout_tbl[name] = [$dijkstra.shortest_path_to(name)[1],$topography.get_weight($nodes[$hostname],value)]
+      if $rout_tbl.has_key?(name)
+        $rout_tbl[name] = [$dijkstra.shortest_path_to(name)[1],$topography.get_weight($nodes[$hostname],value),$rout]
+      end
     end
   end
 end
