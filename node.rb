@@ -171,7 +171,7 @@ def run_djikstras
   $nodes.each do |name, value|
     if name != $hostname
       if $rout_tbl.has_key?(name)
-        $rout_tbl[name] = [$dijkstra.shortest_path_to(name)[1],$topography.get_weight($nodes[$hostname],value),$rout]
+        $rout_tbl[name] = [$dijkstra.shortest_path_to(name)[1],$topography.get_weight($nodes[$hostname],value)]
       end
     end
   end
