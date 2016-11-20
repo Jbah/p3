@@ -1,6 +1,9 @@
 require_relative "priority_queue"
 
 class Dijkstra
+
+  attr_accessor :graph, :source_node, :path_to, :distance_to
+
   def initialize(graph, source_node)
     @graph = graph
     @source_node = source_node
@@ -14,6 +17,8 @@ class Dijkstra
   def distance_to()
     return @distance_to
   end
+
+
 
   def shortest_path_to(node)
     path = []

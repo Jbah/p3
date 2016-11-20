@@ -13,6 +13,7 @@ $port = nil
 $hostname = nil
 $file_data = Hash.new
 #Also https://en.wikipedia.org/wiki/Link-state_routing_protocol#Distributing_maps
+$mutex = Mutex.new
 $rout_tbl = Hash.new
 #$neighbors = Hash.new # Stores only neighbors
 
@@ -22,11 +23,15 @@ $nodes = Hash.new # Stores Node object by name for use with $topography
 $server = nil
 #$sockfd = nil
 #Note: May not be necessary
-$mutex = Mutex.new
+
 
 $sequence_number = 0 # for link state
 
 $topography = Graph.new # local graph of topography
+$dijkstra = nil # dijkstra class
+
+$last_link_state_update = 0 #Stores the time of the last update
+
 
 
 # --------------------- Part 0 --------------------- # 
@@ -52,6 +57,7 @@ def server_init()
         sender_seq_num = arr[2].to_i
         if sender_seq_num != $rout_tbl['sender'][2]
           update_topography(linkstate_hash,sender_seq_num,sender,line + "\n")
+          $current_link_state_update
         end
       end
 
@@ -153,6 +159,16 @@ def send_along_link_state(mesg)
   end
 end
 
+# creates dijkstra object that contains all shortest paths and update routing table
+def run_djikstras
+  $dijkstra = Dijkstra.new($topography, $nodes[$hostname])
+  $nodes.each do |name, value|
+    if name != $hostname
+      $rout_tbl[name] = [$dijkstra.shortest_path_to(name)[1],$topography.get_weight($nodes[$hostname],value)]
+    end
+  end
+end
+
 # Send link state update to all neighbors
 def send_link_state()
   #create and populate hash of neighbors to send with link state message
@@ -249,7 +265,7 @@ def setup(hostname, port)
   Thread.new do 
     server_init 
   end
-
+  $current_link_state_update = Time.now.to_i
   main()
 
 end

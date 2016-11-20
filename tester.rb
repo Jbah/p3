@@ -25,9 +25,11 @@ for elt in graph.edges
 end
 
 puts graph.has_node?(n1)
-print graph.edges[0].to_s
+puts graph.get_weight(n1,n2)
+#print graph.edges[0].to_s
 #print 'hello'
-#shortest_path = d.shortest_path_to(n2)
+shortest_path = d.shortest_path_to(n2)
+puts shortest_path
 #pp d.distance_to()[n1]
 # for elt in shortest_path
 #   print elt.name

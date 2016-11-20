@@ -16,6 +16,15 @@ class Graph
     return @nodes.include?(node)
   end
 
+  def get_weight(from,to)
+    for edge in edges
+      if (edge.from() == from and edge.to() == to) or (edge.from() == to and edge.to() == from)
+        return edge.weight
+      end
+    end
+    return nil
+  end
+
   #updates if contains from and to, return true if updates, false if doesnt
   def update_edge?(from, to ,weight)
     bool = false
