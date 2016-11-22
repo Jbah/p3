@@ -17,12 +17,15 @@ class Graph
   end
 
   def get_weight(from,to)
+    puts "++++++++++++++++"
+    puts edges
+    puts "++++++++++++++++"
     for edge in edges
       if (edge.from() == from and edge.to() == to) or (edge.from() == to and edge.to() == from)
         return edge.weight
       end
     end
-    return nil
+    return 0
   end
 
   #updates if contains from and to, return true if updates, false if doesnt
@@ -41,6 +44,18 @@ class Graph
     if not update_edge?(from, to, weight)
       edges << Edge.new(from, to, weight)
       edges << Edge.new(to,from, weight)
+    end
+  end
+
+  def remove_edge(from,to)
+    to_delete = []
+    for edge in edges
+      if (edge.from == from and edge.to == to) or (edge.from == to and edge.to == from)
+        to_delete.push(edge)
+      end
+    end
+    for elt in to_delete
+      edges.delete(elt)
     end
   end
 end
