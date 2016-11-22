@@ -33,30 +33,41 @@ $dijkstra = nil # dijkstra class
 
 $last_link_state_update = 0 #Stores the time of the last update
 
+$queue = []
 
+$threads = []
 
-# --------------------- Part 0 --------------------- # 
+# --------------------- Part 0 --------------------- #
 
 def server_init()
   $server = TCPServer.new $port.to_i
   loop {
-    Thread.start($server.accept) do |client|
+    $threads << Thread.start($server.accept) do |client|
       loop {
-        puts "Connected"
-
         line = client.gets.chomp
+        $queue.push(line)
+      }
+    end
+  }
+end
+
+def queue_loop()
+    loop {
+      if $queue.length > 0
+        #$mutex.synchronize do
+          line = $queue.shift
+        #end
         if line.include? "EDGEB"
-          puts "EDGEB"
-          puts line
+          #puts "EDGEB"
           line = (line + " 1\n").strip()
           arr = line.split(' ')
           #puts arr[1..4]
+          #$mutex.synchronize do
           edgeb(arr[1..4])
-          puts "test edgeb"
+          #end
           #edgeb(arr)
         elsif line.include? "LINKSTATE"
-          print "Server recieved linkstate message: "
-          puts line
+          #puts "Server recieved linkstate message: "
           arr = line.split("\t")
           #get hash of neighbors and weights of sender
           linkstate_hash = JSON.parse(arr.last)
@@ -64,20 +75,14 @@ def server_init()
           sender = arr[1]
           sender_seq_num = arr[2].to_i
           # Make sure actually have info for this node before accessing the hash
-          $mutex.synchronize do
+          #$mutex.synchronize do
           if (not $seq_number.has_key?(sender)) or sender_seq_num != $seq_number[sender]
-            puts "updating topography"
             update_topography(linkstate_hash,sender_seq_num,sender,line + "\n")
           end
-          end
-
         end
-        # to give processor a rest, may not be needed
-        sleep(0.001)
-      }
-
-    end
-  }
+      end
+      sleep(0.001)
+    }
 end
 
 
@@ -85,13 +90,15 @@ def edgeb(cmd)
   #TODO Test if this still works
   # HAS NOT BEEN TESTED
   ################################
-  $mutex.synchronize do
+
     # update routing table, neighbors, and topography
-    $rout_tbl[cmd[2]] = [cmd[1],1]
+    $rout_tbl[cmd[2]] = [cmd[2],1]
     $seq_number[cmd[2]] = -1
-    $nodes[cmd[2]] = Node.new(cmd[2])
-    $topography.add_node($nodes[cmd[2]])
-    $topography.add_edge($nodes[$hostname],$nodes[cmd[2]],1)
+    $mutex.synchronize do
+      $nodes[cmd[2]] = Node.new(cmd[2])
+      $topography.add_node($nodes[cmd[2]])
+      $topography.add_edge($nodes[$hostname],$nodes[cmd[2]],1)
+    end
 
 
     #################################
@@ -111,12 +118,12 @@ def edgeb(cmd)
       #$sockfd.close
       send_link_state()
     end
-  end
+  #end
 
 end
 
 def dumptable(cmd)
-  
+
   f = File.open(cmd[0][2..-1],"w")
   $rout_tbl.each do |key, array|
     f.write("#{$hostname}" + ",#{key}" + ",#{key}" + ",#{array[1]}")
@@ -151,81 +158,83 @@ def update_topography(link_state_hash, seq_number, sender, mesg)
   #TODO Dijkstras
   #TODO Update routing table
   # Update local sequence number for sender
-
   #IGNORE UNTIL FURTHER NOTICE#####NOTE THIS WILL NOT WORK IF $rout_tbl does not have entry for this yet.
   ######$rout_tbl['sender'][2] = seq_number
-  $mutex.synchronize do
+  #$mutex.synchronize do
     $seq_number[sender] = seq_number
     # add sender to $nodes if not present
-    unless $nodes.has_key?(sender)
-      $nodes[sender] = Node.new(sender)
+    $mutex.synchronize do
+      unless $nodes.has_key?(sender)
+        $nodes[sender] = Node.new(sender)
+      end
     end
     # update topography
     link_state_hash.each do |key,value|
-
-      unless $nodes.has_key?(key)
-        $nodes[key] = Node.new(key)
+      $mutex.synchronize do
+        unless $nodes.has_key?(key)
+          $nodes[key] = Node.new(key)
+        end
       end
-      unless $topography.has_node?($nodes[key])
-        $topography.add_node($nodes[key])
+      $mutex.synchronize do
+        unless $topography.has_node?($nodes[key])
+          $topography.add_node($nodes[key])
+        end
+        $topography.add_edge($nodes[sender],$nodes[key],value[1])
       end
-
-      $topography.add_edge($nodes[sender],$nodes[key],value[1])
-
     end
-  end
+ # end
   send_along_link_state(mesg)
-
-  run_dijkstras()
-
+  #$mutex.synchronize do
+    run_dijkstras()
+  #end
 end
 
 # Pass on link state message rather than create it
 def send_along_link_state(mesg)
-
-  puts "passing along message:"
-  puts mesg
-  $mutex.synchronize do
-    puts $connections
+  #$mutex.synchronize do
     $connections.each do |key, connection|
       connection.puts mesg
     end
-  end
+  #end
 
 end
 
 #TODO figure out when the fuck to call this shit, need timer or something to make sure all link states have propogated
 # creates dijkstra object that contains all shortest paths and update routing table
 def run_dijkstras()
-  $mutex.synchronize do
-    puts "finding shortest path"
-    puts $topography
-    puts $nodes[$hostname]
+    $mutex.synchronize do
+      #$dijkstra = Dijkstra.new($topography, $nodes[$hostname])
     $dijkstra = Dijkstra.new($topography, $nodes[$hostname])
-    puts "calculated dijkstras"
-    $nodes.each do |name, value|
-      if name != $hostname
-        if $rout_tbl.has_key?(name)
-          $rout_tbl[name] = [$dijkstra.shortest_path_to(name)[1],$topography.get_weight($nodes[$hostname],value)]
+    end
+    $mutex.synchronize do
+
+      $nodes.each do |name, value|
+        if name != $hostname
+          if $rout_tbl.has_key?(name)
+            path = $dijkstra.shortest_path_to(value)
+            $rout_tbl[name] = [$dijkstra.shortest_path_to(value)[1],$dijkstra.distance_to[value]]
+
+          end
         end
       end
     end
-    puts $rout_tbl
-  end
+
+  #end
 
 end
 
 # Send link state update to all neighbors
 def send_link_state()
-  puts "sending lsm"
+  run_dijkstras
   #create and populate hash of neighbors to send with link state message
   neighbors = Hash.new()
   $connections.each do |key,connection|
     #first and second element of array into neighbors hash
-      neighbors[key] = $rout_tbl[key][0,1]
+    $mutex.synchronize do
+      neighbors[key] = $rout_tbl[key]
+    end
   end
   to_send = "LINKSTATE" + "\t" + "#{$hostname}" + "\t" + "#{$sequence_number}"  + "\t" + "#{neighbors.to_json}" + "\n"
-  puts $connections
   $connections.each do |key,connection|
     connection.puts to_send
   end
@@ -234,19 +243,30 @@ end
 
 #Both edged and edgeu need to call send_link_state
 def edged(cmd)
-	STDOUT.puts "EDGED: not implemented"
+  $topography.remove_edge($nodes[$hostname],$nodes[cmd[0]])
+  send_link_state
+  puts $topography.edges
+	#STDOUT.puts "EDGED: not implemented"
 end
 
 def edgeu(cmd)
-	STDOUT.puts "EDGEU: not implemented"
+  $topography.add_edge($nodes[$hostname],$nodes[cmd[0]],cmd[1].to_i)
+  send_link_state
+  puts $topography.edges
+	#STDOUT.puts "EDGEU: not implemented"
 end
 
 def status()
-	STDOUT.puts "STATUS: not implemented"
+  neighbors = []
+  $connections.each do |key,connection|
+    neighbors.push(key)
+  end
+  neighbors.sort!
+  STDOUT.puts "Name: #{$hostname} Port: #{$port} Neighbors: #{neighbors.join(",")}"
 end
 
 
-# --------------------- Part 2 --------------------- # 
+# --------------------- Part 2 --------------------- #
 def sendmsg(cmd)
 	STDOUT.puts "SENDMSG: not implemented"
 end
@@ -266,13 +286,12 @@ end
 
 
 
-# do main loop here.... 
+# do main loop here....
 def main()
-  
-  
-  
-
   while(line = STDIN.gets())
+    if line.include? "check"
+      puts $rout_tbl
+    end
     if line.include? "test"
       if $hostname == "n1"
         if line.include? "test1"
@@ -301,25 +320,26 @@ def main()
         args = arr[1..-1]
         edgeb(args)
       end
+    else
+      line = line.strip()
+      arr = line.split(' ')
+      cmd = arr[0]
+      args = arr[1..-1]
+      case cmd
+      when "EDGEB"; edgeb(args)
+      when "EDGED"; edged(args)
+      when "EDGEU"; edgeu(args)
+      when "DUMPTABLE"; dumptable(args)
+      when "SHUTDOWN"; shutdown(args)
+      when "STATUS"; status()
+      when "SENDMSG"; sendmsg(args)
+      when "PING"; ping(args)
+      when "TRACEROUTE"; traceroute(args)
+      when "FTP"; ftp(args)
+      else STDERR.puts "ERROR: INVALID COMMAND \"#{cmd}\""
+      end
     end
-		line = line.strip()
-		arr = line.split(' ')
-		cmd = arr[0]
-		args = arr[1..-1]
 
-		case cmd
-		when "EDGEB"; edgeb(args)
-		when "EDGED"; edged(args)
-		when "EDGEU"; edgeu(args)
-		when "DUMPTABLE"; dumptable(args)
-		when "SHUTDOWN"; shutdown(args)
-		when "STATUS"; status()
-		when "SENDMSG"; sendmsg(args)
-		when "PING"; ping(args)
-		when "TRACEROUTE"; traceroute(args)
-		when "FTP"; ftp(args)
-		else STDERR.puts "ERROR: INVALID COMMAND \"#{cmd}\""
-		end
 	end
 
 end
@@ -335,12 +355,15 @@ def setup(hostname, port)
 
   $hostname = hostname
   $port = port
-  
+
   #set up ports, server, buffers
   $nodes[$hostname] = Node.new($hostname)
   $topography.add_node($nodes[$hostname])
-  Thread.new do 
-    server_init 
+  Thread.new do
+    server_init
+  end
+  Thread.new do
+    queue_loop
   end
   $current_link_state_update = Time.now.to_i
   main()
