@@ -3,10 +3,10 @@ require 'open3'
 require 'csv'
 require 'thread'
 #require '/rgl-master/lib/rgl/adjacency'
-require 'dijkstra/dijkstra'
-require 'dijkstra/node'
-require 'dijkstra/edge'
-require 'dijkstra/graph'
+require_relative 'dijkstra/dijkstra'
+require_relative 'dijkstra/node'
+require_relative 'dijkstra/edge'
+require_relative 'dijkstra/graph'
 require 'json'
 
 $port = nil
@@ -49,13 +49,15 @@ def server_init()
         arr = line.split(' ')
         edgeb(arr[1..4])
       elsif line.include? "LINKSTATE"
-        #TODO: Things here to do with updating tables. Remember to parse on tab. And figure out json
+        print "Server recieved linkstate message: "
+        puts line
         arr = line.split("\t")
         #get hash of neighbors and weights of sender
         linkstate_hash = JSON.parse(arr.last)
         # get sender and sender sequence number
         sender = arr[1]
         sender_seq_num = arr[2].to_i
+        # Make sure actually have info for this node before accessing the hash
         if (not $seq_number.has_key?(sender)) or sender_seq_num != $seq_number[sender]
           update_topography(linkstate_hash,sender_seq_num,sender,line + "\n")
           $current_link_state_update
@@ -73,24 +75,27 @@ def edgeb(cmd)
   ################################
   $mutex.synchronize do
     # update routing table, neighbors, and topography
-    $rout_tbl[cmd[2]] = [cmd[1],1]
-    $seq_number[cmd[2]] = -1
-    $nodes[cmd[2]] = Node.new(cmd[2])
-    $topography.add_node($nodes[cmd[2]])
-    $topography.add_edge($nodes[$hostname],$nodes[cmd[2]],1)
+    $rout_tbl[cmd[3]] = [cmd[2],1]
+    $seq_number[cmd[3]] = -1
+    $nodes[cmd[3]] = Node.new(cmd[3])
+    $topography.add_node($nodes[cmd[3]])
+    $topography.add_edge($nodes[$hostname],$nodes[cmd[3]],1)
 
   end
   #################################
   # Store new connection in hash
-  unless $connections.has_key?(cmd[2])
-    $connections[cmd[2]] = TCPSocket.new cmd[1], $file_data[cmd[2]]
+  puts "test"
+  puts cmd
+  unless $connections.has_key?(cmd[3])
+    $connections[cmd[3]] = TCPSocket.new cmd[2], $file_data[cmd[3]]
   end
   if cmd.length < 4
     #$sockfd = TCPSocket.new cmd[1], $file_data[cmd[2]]
     #$connections[cmd[2]] = TCPSocket.new cmd[1], $file_data[cmd[2]]
-    to_send = "EDGEB " + cmd[1] + " " + cmd[0] + " " + $hostname + "\n"
+    to_send = "EDGEB " + cmd[2] + " " + cmd[1] + " " + $hostname + "\n"
     #$sockfd.puts to_send
-    $connections[cmd[2]].puts to_send
+    $connections[cmd[3]].puts to_send
+    puts to_send
     #$sockfd.close
   end
    
@@ -134,8 +139,8 @@ def update_topography(link_state_hash, seq_number, sender, mesg)
   #TODO Update routing table
   # Update local sequence number for sender
 
-  #NOTE THIS WILL NOT WORK IF $rout_tbl does not have entry for this yet.
-  #$rout_tbl['sender'][2] = seq_number
+  #IGNORE UNTIL FURTHER NOTICE#####NOTE THIS WILL NOT WORK IF $rout_tbl does not have entry for this yet.
+  ######$rout_tbl['sender'][2] = seq_number
   $seq_number[sender] = seq_number
   # add sender to $nodes if not present
   unless $nodes.has_key?(sender)
@@ -154,6 +159,8 @@ def update_topography(link_state_hash, seq_number, sender, mesg)
   end
 
   send_along_link_state(mesg)
+
+  run_dijkstras
 
 end
 
@@ -238,6 +245,7 @@ def main()
 		arr = line.split(' ')
 		cmd = arr[0]
 		args = arr[1..-1]
+    puts args
 		case cmd
 		when "EDGEB"; edgeb(args)
 		when "EDGED"; edged(args)
