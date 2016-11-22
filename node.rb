@@ -41,28 +41,40 @@ def server_init()
   $server = TCPServer.new $port.to_i
   loop {
     Thread.start($server.accept) do |client|
-      print "Connected"
+      loop {
+        puts "Connected"
 
-      line = client.gets.chomp
-      if line.include? "EDGEB"
-        line = (line + " 1\n").strip()
-        arr = line.split(' ')
-        edgeb(arr[1..4])
-      elsif line.include? "LINKSTATE"
-        print "Server recieved linkstate message: "
-        puts line
-        arr = line.split("\t")
-        #get hash of neighbors and weights of sender
-        linkstate_hash = JSON.parse(arr.last)
-        # get sender and sender sequence number
-        sender = arr[1]
-        sender_seq_num = arr[2].to_i
-        # Make sure actually have info for this node before accessing the hash
-        if (not $seq_number.has_key?(sender)) or sender_seq_num != $seq_number[sender]
-          update_topography(linkstate_hash,sender_seq_num,sender,line + "\n")
-          $current_link_state_update
+        line = client.gets.chomp
+        if line.include? "EDGEB"
+          puts "EDGEB"
+          puts line
+          line = (line + " 1\n").strip()
+          arr = line.split(' ')
+          #puts arr[1..4]
+          edgeb(arr[1..4])
+          puts "test edgeb"
+          #edgeb(arr)
+        elsif line.include? "LINKSTATE"
+          print "Server recieved linkstate message: "
+          puts line
+          arr = line.split("\t")
+          #get hash of neighbors and weights of sender
+          linkstate_hash = JSON.parse(arr.last)
+          # get sender and sender sequence number
+          sender = arr[1]
+          sender_seq_num = arr[2].to_i
+          # Make sure actually have info for this node before accessing the hash
+          $mutex.synchronize do
+          if (not $seq_number.has_key?(sender)) or sender_seq_num != $seq_number[sender]
+            puts "updating topography"
+            update_topography(linkstate_hash,sender_seq_num,sender,line + "\n")
+          end
+          end
+
         end
-      end
+        # to give processor a rest, may not be needed
+        sleep(0.001)
+      }
 
     end
   }
@@ -75,30 +87,31 @@ def edgeb(cmd)
   ################################
   $mutex.synchronize do
     # update routing table, neighbors, and topography
-    $rout_tbl[cmd[3]] = [cmd[2],1]
-    $seq_number[cmd[3]] = -1
-    $nodes[cmd[3]] = Node.new(cmd[3])
-    $topography.add_node($nodes[cmd[3]])
-    $topography.add_edge($nodes[$hostname],$nodes[cmd[3]],1)
+    $rout_tbl[cmd[2]] = [cmd[1],1]
+    $seq_number[cmd[2]] = -1
+    $nodes[cmd[2]] = Node.new(cmd[2])
+    $topography.add_node($nodes[cmd[2]])
+    $topography.add_edge($nodes[$hostname],$nodes[cmd[2]],1)
 
+
+    #################################
+    # Store new connection in hash
+    #puts cmd[3]
+
+    unless $connections.has_key?(cmd[2])
+      $connections[cmd[2]] = TCPSocket.new cmd[1], $file_data[cmd[2]]
+    end
+    if cmd.length < 4
+      #$sockfd = TCPSocket.new cmd[1], $file_data[cmd[2]]
+      #$connections[cmd[2]] = TCPSocket.new cmd[1], $file_data[cmd[2]]
+      to_send = "EDGEB " + cmd[1] + " " + cmd[0] + " " + $hostname + "\n"
+      #$sockfd.puts to_send
+      $connections[cmd[2]].puts to_send
+      #puts to_send
+      #$sockfd.close
+      send_link_state()
+    end
   end
-  #################################
-  # Store new connection in hash
-  puts "test"
-  puts cmd
-  unless $connections.has_key?(cmd[3])
-    $connections[cmd[3]] = TCPSocket.new cmd[2], $file_data[cmd[3]]
-  end
-  if cmd.length < 4
-    #$sockfd = TCPSocket.new cmd[1], $file_data[cmd[2]]
-    #$connections[cmd[2]] = TCPSocket.new cmd[1], $file_data[cmd[2]]
-    to_send = "EDGEB " + cmd[2] + " " + cmd[1] + " " + $hostname + "\n"
-    #$sockfd.puts to_send
-    $connections[cmd[3]].puts to_send
-    puts to_send
-    #$sockfd.close
-  end
-   
 
 end
 
@@ -130,7 +143,7 @@ end
 
 
 # --------------------- Part 1 --------------------- #
-
+#TODO Handle edge removal
 def update_topography(link_state_hash, seq_number, sender, mesg)
   #TODO update sequence number
   #TODO update $topography with edges from sender to link_state_hash
@@ -141,51 +154,70 @@ def update_topography(link_state_hash, seq_number, sender, mesg)
 
   #IGNORE UNTIL FURTHER NOTICE#####NOTE THIS WILL NOT WORK IF $rout_tbl does not have entry for this yet.
   ######$rout_tbl['sender'][2] = seq_number
-  $seq_number[sender] = seq_number
-  # add sender to $nodes if not present
-  unless $nodes.has_key?(sender)
-    $nodes[sender] = Node.new(sender)
-  end
-  # update topography
-  link_state_hash.each do |key,value|
-    unless $nodes.has_key?(key)
-      $nodes[key] = Node.new(key)
+  $mutex.synchronize do
+    $seq_number[sender] = seq_number
+    # add sender to $nodes if not present
+    unless $nodes.has_key?(sender)
+      $nodes[sender] = Node.new(sender)
     end
-    unless $topography.has_node?($nodes[key])
-      $topography.add_node($nodes[key])
+    # update topography
+    link_state_hash.each do |key,value|
+
+      unless $nodes.has_key?(key)
+        $nodes[key] = Node.new(key)
+      end
+      unless $topography.has_node?($nodes[key])
+        $topography.add_node($nodes[key])
+      end
+
+      $topography.add_edge($nodes[sender],$nodes[key],value[1])
+
     end
-
-    $topography.add_edge($nodes[sender],nodes[key],value[1])
   end
-
   send_along_link_state(mesg)
 
-  run_dijkstras
+  run_dijkstras()
 
 end
 
 # Pass on link state message rather than create it
 def send_along_link_state(mesg)
-  $connections.each do |key, connection|
-    connection.puts mesg
+
+  puts "passing along message:"
+  puts mesg
+  $mutex.synchronize do
+    puts $connections
+    $connections.each do |key, connection|
+      connection.puts mesg
+    end
   end
+
 end
 
 #TODO figure out when the fuck to call this shit, need timer or something to make sure all link states have propogated
 # creates dijkstra object that contains all shortest paths and update routing table
 def run_dijkstras()
-  $dijkstra = Dijkstra.new($topography, $nodes[$hostname])
-  $nodes.each do |name, value|
-    if name != $hostname
-      if $rout_tbl.has_key?(name)
-        $rout_tbl[name] = [$dijkstra.shortest_path_to(name)[1],$topography.get_weight($nodes[$hostname],value)]
+  $mutex.synchronize do
+    puts "finding shortest path"
+    puts $topography
+    puts $nodes[$hostname]
+    $dijkstra = Dijkstra.new($topography, $nodes[$hostname])
+    puts "calculated dijkstras"
+    $nodes.each do |name, value|
+      if name != $hostname
+        if $rout_tbl.has_key?(name)
+          $rout_tbl[name] = [$dijkstra.shortest_path_to(name)[1],$topography.get_weight($nodes[$hostname],value)]
+        end
       end
     end
+    puts $rout_tbl
   end
+
 end
 
 # Send link state update to all neighbors
 def send_link_state()
+  puts "sending lsm"
   #create and populate hash of neighbors to send with link state message
   neighbors = Hash.new()
   $connections.each do |key,connection|
@@ -193,6 +225,7 @@ def send_link_state()
       neighbors[key] = $rout_tbl[key][0,1]
   end
   to_send = "LINKSTATE" + "\t" + "#{$hostname}" + "\t" + "#{$sequence_number}"  + "\t" + "#{neighbors.to_json}" + "\n"
+  puts $connections
   $connections.each do |key,connection|
     connection.puts to_send
   end
@@ -240,12 +273,40 @@ def main()
   
 
   while(line = STDIN.gets())
-   
+    if line.include? "test"
+      if $hostname == "n1"
+        if line.include? "test1"
+          line = "EDGEB localhost localhost n2\n"
+          line = line.strip()
+          arr = line.split(' ')
+          cmd = arr[0]
+          args = arr[1..-1]
+          edgeb(args)
+        end
+        if line.include? "test2"
+          line = "EDGEB localhost localhost n3\n"
+          line = line.strip()
+          arr = line.split(' ')
+          cmd = arr[0]
+          args = arr[1..-1]
+          edgeb(args)
+        end
+
+      end
+      if $hostname == "n2"
+        line = "EDGEB localhost localhost n3\n"
+        line = line.strip()
+        arr = line.split(' ')
+        cmd = arr[0]
+        args = arr[1..-1]
+        edgeb(args)
+      end
+    end
 		line = line.strip()
 		arr = line.split(' ')
 		cmd = arr[0]
 		args = arr[1..-1]
-    puts args
+
 		case cmd
 		when "EDGEB"; edgeb(args)
 		when "EDGED"; edged(args)
