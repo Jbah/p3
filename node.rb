@@ -2,6 +2,8 @@ require 'socket'
 require 'open3'
 require 'csv'
 require 'thread'
+require 'yaml'
+
 #require '/rgl-master/lib/rgl/adjacency'
 require_relative 'dijkstra/dijkstra'
 require_relative 'dijkstra/node'
@@ -12,6 +14,9 @@ require 'json'
 $port = nil
 $hostname = nil
 $file_data = Hash.new
+$updateInterval = nil
+$maxPayload = nil
+$pingTimeout = nil
 #Also https://en.wikipedia.org/wiki/Link-state_routing_protocol#Distributing_maps
 $mutex = Mutex.new
 $rout_tbl = Hash.new
@@ -345,6 +350,14 @@ def main()
 end
 
 def setup(hostname, port)
+  
+  config_str = begin
+                     YAML.load_file('config')
+                   end
+  config_data = config_str.split("\s")
+  $updateInterval = config_data[0][config_data[0].index("=")+1..-1].to_i
+  $maxPayload = config_data[1][config_data[1].index("=")+1..-1].to_i
+  $pingTimeout = config_data[2][config_data[2].index("=")+1..-1].to_i
 
   File.open(ARGV[2], 'r') do |file|
     file.each_line do |line|
@@ -366,8 +379,15 @@ def setup(hostname, port)
     queue_loop
   end
   $current_link_state_update = Time.now.to_i
+  Thread.new do
+    loop {
+      send_link_state
+      puts "Interval!"
+      sleep $updateInterval
+    }
+  end
   main()
-
+  
 end
 
 setup(ARGV[0], ARGV[1])
