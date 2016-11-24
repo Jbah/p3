@@ -382,7 +382,6 @@ def setup(hostname, port)
   Thread.new do
     loop {
       send_link_state
-      puts "Interval!"
       sleep $updateInterval
     }
   end
