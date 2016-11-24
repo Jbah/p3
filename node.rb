@@ -245,14 +245,14 @@ end
 def edged(cmd)
   $topography.remove_edge($nodes[$hostname],$nodes[cmd[0]])
   send_link_state
-  puts $topography.edges
+  
 	#STDOUT.puts "EDGED: not implemented"
 end
 
 def edgeu(cmd)
   $topography.add_edge($nodes[$hostname],$nodes[cmd[0]],cmd[1].to_i)
   send_link_state
-  puts $topography.edges
+  
 	#STDOUT.puts "EDGEU: not implemented"
 end
 
