@@ -59,6 +59,8 @@ end
 def queue_loop()
     loop {
       if $queue.length > 0
+        # puts "++++++++++++++++++++++"
+        # puts $queue
         #$mutex.synchronize do
           line = $queue.shift
         #end
@@ -84,9 +86,16 @@ def queue_loop()
           if (not $seq_number.has_key?(sender)) or sender_seq_num != $seq_number[sender]
             update_topography(linkstate_hash,sender_seq_num,sender,line + "\n")
           end
+
+        elsif line.include? "DUMPTABLE"
+          arr = line.split(' ')
+          cmd = arr[0]
+          args = arr[1..-1]
+          dumptable(args,true)
+
         end
       end
-      sleep(0.001)
+      sleep(0.00001)
     }
 end
 
@@ -127,11 +136,19 @@ def edgeb(cmd)
 
 end
 
-def dumptable(cmd)
+def dumptable(cmd,bool=false)
+  if bool
+    f = File.open(cmd[0][2..-1],"w")
 
-  f = File.open(cmd[0][2..-1],"w")
-  $rout_tbl.each do |key, array|
-    f.write("#{$hostname}" + ",#{key}" + ",#{key}" + ",#{array[1]}")
+    $mutex.synchronize do
+      $rout_tbl.each do |key, array|
+
+        f.write("#{$hostname}" + ",#{key}" + ",#{key}" + ",#{array[1]}\n")
+      end
+    end
+    f.close
+  else
+    $queue.push("DUMPTABLE " + cmd.join(" "))
   end
 
 end
@@ -187,6 +204,24 @@ def update_topography(link_state_hash, seq_number, sender, mesg)
         $topography.add_edge($nodes[sender],$nodes[key],value[1])
       end
     end
+    #Remove any edges that have been removed from the network from the local topography
+    edges_l = $topography.get_edges_from_node($nodes[sender])
+    edges_r = []
+    link_state_hash.each do |key,value|
+      edges_r.push(Edge.new($nodes[sender],$nodes[key],0))
+      edges_r.push(Edge.new($nodes[key],$nodes[sender],0))
+    end
+    # puts edges_l[0] == edges_r[1]
+    # puts edges_l
+    # puts edges_r
+    for elt in edges_l
+      if not edges_r.include?(elt)
+        $topography.remove_edge(elt.from,elt.to)
+      end
+    end
+    # for edge in edges_res
+    #   $topography.remove_edge(edge.from,edge.to)
+    # end
  # end
   send_along_link_state(mesg)
   #$mutex.synchronize do
@@ -249,6 +284,7 @@ end
 #Both edged and edgeu need to call send_link_state
 def edged(cmd)
   $topography.remove_edge($nodes[$hostname],$nodes[cmd[0]])
+  $connections.delete(cmd[0])
   send_link_state
   
 	#STDOUT.puts "EDGED: not implemented"
@@ -331,16 +367,17 @@ def main()
       cmd = arr[0]
       args = arr[1..-1]
       case cmd
-      when "EDGEB"; edgeb(args)
-      when "EDGED"; edged(args)
-      when "EDGEU"; edgeu(args)
-      when "DUMPTABLE"; dumptable(args)
-      when "SHUTDOWN"; shutdown(args)
-      when "STATUS"; status()
-      when "SENDMSG"; sendmsg(args)
-      when "PING"; ping(args)
-      when "TRACEROUTE"; traceroute(args)
-      when "FTP"; ftp(args)
+        when "EDGEB"; edgeb(args)
+        when "EDGED"; edged(args)
+        when "EDGEU"; edgeu(args)
+        when "DUMPTABLE"; dumptable(args)
+        when "SHUTDOWN"; shutdown(args)
+        when "STATUS"; status()
+        when "SENDMSG"; sendmsg(args)
+        when "PING"; ping(args)
+        when "TRACEROUTE"; traceroute(args)
+        when "FTP"; ftp(args)
+        when "stats"; puts $topography.edges
       else STDERR.puts "ERROR: INVALID COMMAND \"#{cmd}\""
       end
     end
@@ -379,12 +416,12 @@ def setup(hostname, port)
     queue_loop
   end
   $current_link_state_update = Time.now.to_i
-  Thread.new do
-    loop {
-      send_link_state
-      sleep $updateInterval
-    }
-  end
+  # Thread.new do
+  #   loop {
+  #     send_link_state
+  #     sleep $updateInterval
+  #   }
+  #end
   main()
   
 end

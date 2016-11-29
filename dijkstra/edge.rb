@@ -17,6 +17,14 @@ class Edge
     return @weight
   end
 
+  def == (other_edge)
+    if ((other_edge.to == to) and (other_edge.from == from)) or ((other_edge.to == from) and (other_edge.from == to))
+      return true
+    else
+      return false
+    end
+  end
+
   def <=>(other)
     self.weight <=> other.weight
   end

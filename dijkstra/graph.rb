@@ -17,9 +17,6 @@ class Graph
   end
 
   def get_weight(from,to)
-    puts "++++++++++++++++"
-    puts edges
-    puts "++++++++++++++++"
     for edge in edges
       if (edge.from() == from and edge.to() == to) or (edge.from() == to and edge.to() == from)
         return edge.weight
@@ -38,6 +35,26 @@ class Graph
       end
     end
     return bool
+  end
+
+  def has_edge?(from,to)
+    bool = false
+    @edges.each() do |edge|
+      if (edge.from() == from and edge.to() == to) or (edge.from() == to and edge.to() == from)
+        bool = true
+      end
+    end
+    return bool
+  end
+
+  def get_edges_from_node(node)
+    ret = []
+    for edge in edges
+      if edge.to == node or edge.from == node
+        ret.push(edge)
+      end
+    end
+    return ret
   end
 
   def add_edge(from, to, weight)
