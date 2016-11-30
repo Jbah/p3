@@ -36,7 +36,7 @@ $sequence_number = 0 # for link state
 $topography = Graph.new # local graph of topography
 $dijkstra = nil # dijkstra class
 
-$last_link_state_update = 0 #Stores the time of the last update
+$time = 0 #Stores the time of the last update
 
 $queue = []
 
@@ -415,7 +415,12 @@ def setup(hostname, port)
   Thread.new do
     queue_loop
   end
-  $current_link_state_update = Time.now.to_i
+  # Handle time
+  $time = Time.now.to_i
+  Thread.new do
+    sleep 0.01
+    $time += 0.01
+  end
   Thread.new do
     loop {
       send_link_state
