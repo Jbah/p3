@@ -416,12 +416,12 @@ def setup(hostname, port)
     queue_loop
   end
   $current_link_state_update = Time.now.to_i
-  # Thread.new do
-  #   loop {
-  #     send_link_state
-  #     sleep $updateInterval
-  #   }
-  #end
+  Thread.new do
+    loop {
+      send_link_state
+      sleep $updateInterval
+    }
+  end
   main()
   
 end
