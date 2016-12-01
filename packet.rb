@@ -5,8 +5,8 @@ class Packet < JSONable
   attr_accessor :msg
 
   def initialize
-    @header = {"dst" => nil, "src" => nil,
-      "len" => 0, "offset" => 0, "mf" => 0}
+    @header = {"dst" => nil, "src" => nil, "ID"=>nil,
+      "len" => 0, "offset" => 0, "mf" => false}
     @msg = ""
   end
 

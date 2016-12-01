@@ -18,7 +18,9 @@ $file_data = Hash.new
 $updateInterval = nil
 $maxPayload = nil
 $pingTimeout = nil
-$packet_buffer = nil
+$packet_buffer = []
+$buffered_packets = 0
+$ID_counter = 0
 #Also https://en.wikipedia.org/wiki/Link-state_routing_protocol#Distributing_maps
 $mutex = Mutex.new
 $rout_tbl = Hash.new
@@ -100,9 +102,31 @@ def queue_loop()
           packet.from_json! arr.last
           dst = packet.header["dst"]
           src = packet.header["src"]
+          id = packet.header["ID"]
+          offset = packet.header["offset"]
+          mf = packet.header["mf"]
           msg = packet.msg
+          to_output = ""
           if dst == $hostname
-            STDOUT.puts "SENDMSG: #{src} --> #{msg}"
+            if mf == false
+              iter = 0
+              while $buffered_packets > 0
+                to_output = to_output + $packet_buffer[iter].msg
+                iter = iter + $maxPayload
+                $buffered_packets = $buffered_packets - 1
+              end
+              to_output = to_output + msg
+              STDOUT.puts "SENDMSG: #{src} --> #{to_output}"
+            else
+              
+              if offset > 0 && $packet_buffer[0].header["ID"] != id
+                #ID of current packet and buffered packets don't match
+              else
+                $packet_buffer[offset] = packet
+                $buffered_packets = $buffered_packets + 1 
+                
+              end
+            end
           else
             if $rout_tbl.has_key?(dst)
               next_hop = $rout_tbl[dst][0].name #next_hop router name
@@ -115,8 +139,8 @@ def queue_loop()
               fail_packet.header["src"] = $hostname
               fail_packet.msg = msg
               if $connections.has_key?(src)
-                to_send = "SENDMSG FAILURE" + "\t" + "#{packet.to_json}" + "\n"
-                $connections["src"].puts to_send
+                to_send = "SENDMSG FAILURE" + "\t" + "#{fail_packet.to_json}" + "\n"
+                $connections[src].puts to_send
               end
             end
           end
@@ -352,24 +376,52 @@ end
 
 # --------------------- Part 2 --------------------- #
 def sendmsg(cmd)
-  
   #STDOUT.puts "SENDMSG: not implemented"
   #cmd[0] = DST
   #cmd[1] = MSG
+  err_flag = false
   payload = cmd[1]
-  payload_len = cmd[1].length
-  msg_packet = Packet.new
-  msg_packet.header["dst"] = cmd[0] #sets dst header field
-  msg_packet.header["src"] = $hostname
-  msg_packet.header["len"] = payload_len #sets length header field
-  msg_packet.msg = payload
-  if $rout_tbl.has_key?(cmd[0])
+  payload_len = payload.bytesize
+  tracker = 0
+  offset = 0
+  puts "Payload len: #{payload_len}"
+  puts "Max Payload: #{$maxPayload}"
+  while payload_len > $maxPayload || err_flag == true
+    if $rout_tbl.has_key?(cmd[0])
+      msg_packet = Packet.new
+      msg_packet.header["dst"] = cmd[0] #sets dst header field
+      msg_packet.header["src"] = $hostname
+      msg_packet.header["len"] = $maxPayload #sets length header field
+      msg_packet.header["ID"] = $ID_counter
+      msg_packet.header["offset"] = offset
+      msg_packet.header["mf"] = true
+      msg_packet.msg = payload[tracker..(tracker + $maxPayload - 1)]
+      
+      tracker = tracker + $maxPayload
+      payload_len = payload_len - $maxPayload
+      offset = offset + $maxPayload
+      next_hop = $rout_tbl[cmd[0]][0].name #next_hop router name
+      to_send = "MSG" + "\t" + "#{msg_packet.to_json}" + "\n"
+      $connections[next_hop].puts to_send
+    else
+      STDOUT.puts "SENDMSG ERROR: HOST UNREACHABLE"
+      err_flag = true
+    end
+  end
+  if payload_len > 0
+    msg_packet = Packet.new
+    msg_packet.header["dst"] = cmd[0] #sets dst header field
+    msg_packet.header["src"] = $hostname
+    msg_packet.header["len"] = payload_len #sets length header field
+    msg_packet.header["ID"] = $ID_counter
+    msg_packet.header["offset"] = offset + payload_len
+    msg_packet.header["mf"] = false
+    msg_packet.msg = payload[tracker..payload.bytesize]
     next_hop = $rout_tbl[cmd[0]][0].name #next_hop router name
     to_send = "MSG" + "\t" + "#{msg_packet.to_json}" + "\n"
     $connections[next_hop].puts to_send
-  else
-    STDOUT.puts "SENDMSG ERROR: HOST UNREACHABLE"
   end
+  $ID_counter = $ID_counter + 1
 end
 
 def ping(cmd)
