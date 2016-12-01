@@ -9,6 +9,7 @@ require_relative 'dijkstra/dijkstra'
 require_relative 'dijkstra/node'
 require_relative 'dijkstra/edge'
 require_relative 'dijkstra/graph'
+require_relative 'packet'
 require 'json'
 
 $port = nil
@@ -250,11 +251,12 @@ def run_dijkstras()
 
       $nodes.each do |name, value|
         if name != $hostname
-          if $rout_tbl.has_key?(name)
+          
             path = $dijkstra.shortest_path_to(value)
-            $rout_tbl[name] = [$dijkstra.shortest_path_to(value)[1],$dijkstra.distance_to[value]]
-
-          end
+            $rout_tbl[name] = [$dijkstra.shortest_path_to(value)[1],$dijkstra.distance_to[value]
+]
+        
+          
         end
       end
     end
@@ -309,7 +311,19 @@ end
 
 # --------------------- Part 2 --------------------- #
 def sendmsg(cmd)
-	STDOUT.puts "SENDMSG: not implemented"
+  #STDOUT.puts "SENDMSG: not implemented"
+  #cmd[0] = DST
+  #cmd[1] = MSG
+  payload = cmd[1]
+  payload_len = cmd[1].length
+  msg_packet = Packet.new
+  msg_packet.header["dst"] = cmd[0]
+  msg_packet.header["len"] = payload_len
+  puts $rout_tbl
+  puts $topography.edges
+  next_hop = $rout_tbl[cmd[0]][0]
+  puts next_hop
+
 end
 
 def ping(cmd)
@@ -422,6 +436,7 @@ def setup(hostname, port)
     $time += 0.01
   end
   Thread.new do
+    
     loop {
       send_link_state
       sleep $updateInterval
