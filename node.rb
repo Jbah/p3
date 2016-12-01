@@ -6,7 +6,7 @@ require 'yaml'
 
 #require '/rgl-master/lib/rgl/adjacency'
 require_relative 'dijkstra/dijkstra'
-require_relative 'dijkstra/node'
+require_relative 'dijkstra/graph_node'
 require_relative 'dijkstra/edge'
 require_relative 'dijkstra/graph'
 require_relative 'packet'
@@ -18,6 +18,7 @@ $file_data = Hash.new
 $updateInterval = nil
 $maxPayload = nil
 $pingTimeout = nil
+$packet_buffer = nil
 #Also https://en.wikipedia.org/wiki/Link-state_routing_protocol#Distributing_maps
 $mutex = Mutex.new
 $rout_tbl = Hash.new
@@ -87,13 +88,53 @@ def queue_loop()
           if (not $seq_number.has_key?(sender)) or sender_seq_num != $seq_number[sender]
             update_topography(linkstate_hash,sender_seq_num,sender,line + "\n")
           end
-
         elsif line.include? "DUMPTABLE"
           arr = line.split(' ')
           cmd = arr[0]
           args = arr[1..-1]
           dumptable(args,true)
 
+        elsif line.include? "MSG"
+          arr = line.split("\t")
+          packet = Packet.new
+          packet.from_json! arr.last
+          dst = packet.header["dst"]
+          src = packet.header["src"]
+          msg = packet.msg
+          if dst == $hostname
+            STDOUT.puts "SENDMSG: #{src} --> #{msg}"
+          else
+            if $rout_tbl.has_key?(dst)
+              next_hop = $rout_tbl[dst][0].name #next_hop router name
+              to_send = "MSG" + "\t" + "#{packet.to_json}" + "\n"
+              $connections[next_hop].puts to_send
+
+            else
+              fail_packet = Packet.new
+              fail_packet.header["dst"] = src
+              fail_packet.header["src"] = $hostname
+              fail_packet.msg = msg
+              if $connections.has_key?(src)
+                to_send = "SENDMSG FAILURE" + "\t" + "#{packet.to_json}" + "\n"
+                $connections["src"].puts to_send
+              end
+            end
+          end
+
+        elsif line.include? "SENDMSG FAILURE"
+          arr = line.split("\t")
+          packet = Packet.new
+          packet.from_json! arr.last
+          dst = packet.header["dst"]
+          msg = packet.msg
+          if dst == $hostname
+            STDOUT.puts "SENDMSG ERROR: HOST UNREACHABLE"
+          else
+            next_hop = $rout_tbl[dst][0].name #next_hop router name
+            to_send = "SENDMSG FAILURE" + "\t" + "#{packet.to_json}" + "\n"
+            $connections[next_hop].puts to_send
+          end
+          
         end
       end
       sleep(0.00001)
@@ -311,19 +352,24 @@ end
 
 # --------------------- Part 2 --------------------- #
 def sendmsg(cmd)
+  
   #STDOUT.puts "SENDMSG: not implemented"
   #cmd[0] = DST
   #cmd[1] = MSG
   payload = cmd[1]
   payload_len = cmd[1].length
   msg_packet = Packet.new
-  msg_packet.header["dst"] = cmd[0]
-  msg_packet.header["len"] = payload_len
-  puts $rout_tbl
-  puts $topography.edges
-  next_hop = $rout_tbl[cmd[0]][0]
-  puts next_hop
-
+  msg_packet.header["dst"] = cmd[0] #sets dst header field
+  msg_packet.header["src"] = $hostname
+  msg_packet.header["len"] = payload_len #sets length header field
+  msg_packet.msg = payload
+  if $rout_tbl.has_key?(cmd[0])
+    next_hop = $rout_tbl[cmd[0]][0].name #next_hop router name
+    to_send = "MSG" + "\t" + "#{msg_packet.to_json}" + "\n"
+    $connections[next_hop].puts to_send
+  else
+    STDOUT.puts "SENDMSG ERROR: HOST UNREACHABLE"
+  end
 end
 
 def ping(cmd)
