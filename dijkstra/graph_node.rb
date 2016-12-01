@@ -1,5 +1,5 @@
 class Node
-  attr_accessor :name, :graph
+  attr_accessor :name, :graph :test
 
   def initialize(name)
     @name = name
