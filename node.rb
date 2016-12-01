@@ -238,9 +238,6 @@ def shutdown(cmd)
   $connections.each do |key, connection|
     connection.close
   end
-  $threads.each do |thread|
-    thread.exit
-  end
   #STDOUT.puts "SHUTDOWN: not implemented"
   exit(0)
 end
