@@ -98,66 +98,73 @@ def queue_loop()
 
         elsif line.include? "MSG"
           arr = line.split("\t")
+          puts arr.last
           packet = Packet.new
           packet.from_json! arr.last
           dst = packet.header["dst"]
-          src = packet.header["src"]
-          id = packet.header["ID"]
-          offset = packet.header["offset"]
-          mf = packet.header["mf"]
-          msg = packet.msg
-          to_output = ""
-          if dst == $hostname
-            if mf == false
-              iter = 0
-              while $buffered_packets > 0
-                to_output = to_output + $packet_buffer[iter].msg
-                iter = iter + $maxPayload
-                $buffered_packets = $buffered_packets - 1
-              end
-              to_output = to_output + msg
-              STDOUT.puts "SENDMSG: #{src} --> #{to_output}"
+          if packet.header["ping"] == true
+            if dst == $hostname
+              
+              
             else
               
-              if offset > 0 && $packet_buffer[0].header["ID"] != id
-                #ID of current packet and buffered packets don't match
-              else
-                $packet_buffer[offset] = packet
-                $buffered_packets = $buffered_packets + 1 
-                
-              end
             end
-          else
-            if $rout_tbl.has_key?(dst)
-              next_hop = $rout_tbl[dst][0].name #next_hop router name
-              to_send = "MSG" + "\t" + "#{packet.to_json}" + "\n"
-              $connections[next_hop].puts to_send
-
+          elsif packet.header["fail"] == true
+            
+            if dst == $hostname
+              STDOUT.puts "SENDMSG ERROR: HOST UNREACHABLE"
             else
-              fail_packet = Packet.new
-              fail_packet.header["dst"] = src
-              fail_packet.header["src"] = $hostname
-              fail_packet.msg = msg
-              if $connections.has_key?(src)
-                to_send = "SENDMSG FAILURE" + "\t" + "#{fail_packet.to_json}" + "\n"
-                $connections[src].puts to_send
+              if $rout_tbl.has_key?(dst)
+                next_hop = $rout_tbl[dst][0].name #next_hop router name
+                to_send = "MSG" + "\t" + "#{packet.to_json}" + "\n"
+                $connections[next_hop].puts to_send
+              end
+            end
+          else
+            
+            dst = packet.header["dst"]
+            src = packet.header["src"]
+            id = packet.header["ID"]
+            offset = packet.header["offset"]
+            mf = packet.header["mf"]
+            msg = packet.msg
+            to_output = ""
+            if dst == $hostname
+              if mf == false
+                iter = 0
+                while $buffered_packets > 0
+                  if $packet_buffer[iter]
+                    to_output = to_output + $packet_buffer[iter].msg
+                    iter = iter + $maxPayload
+                    $buffered_packets = $buffered_packets - 1
+                  end
+                end
+                to_output = to_output + msg
+                STDOUT.puts "SENDMSG: #{src} --> #{to_output}"
+              else
+                if offset > 0 
+                  if $packet_buffer[0].header["ID"] != id
+                    #ID of current packet and buffered packets don't match
+                  end
+                else
+                  $packet_buffer[offset] = packet
+                  $buffered_packets = $buffered_packets + 1 
+                end
+              end
+            
+            else
+              if $rout_tbl.has_key?(dst)
+                next_hop = $rout_tbl[dst][0].name #next_hop router name
+                to_send = "MSG" + "\t" + "#{packet.to_json}" + "\n"
+                $connections[next_hop].puts to_send
+                
+              else
+                send_fail_packet(packet)
               end
             end
           end
-
         elsif line.include? "SENDMSG FAILURE"
-          arr = line.split("\t")
-          packet = Packet.new
-          packet.from_json! arr.last
-          dst = packet.header["dst"]
-          msg = packet.msg
-          if dst == $hostname
-            STDOUT.puts "SENDMSG ERROR: HOST UNREACHABLE"
-          else
-            next_hop = $rout_tbl[dst][0].name #next_hop router name
-            to_send = "SENDMSG FAILURE" + "\t" + "#{packet.to_json}" + "\n"
-            $connections[next_hop].puts to_send
-          end
+          
           
         end
       end
@@ -230,6 +237,9 @@ def shutdown(cmd)
   # kill open connections
   $connections.each do |key, connection|
     connection.close
+  end
+  $threads.each do |thread|
+    thread.exit
   end
   #STDOUT.puts "SHUTDOWN: not implemented"
   exit(0)
@@ -375,6 +385,18 @@ end
 
 
 # --------------------- Part 2 --------------------- #
+def send_fail_packet(packet)
+  fail_packet = Packet.new
+  fail_packet.header["dst"] = packet.header["src"]
+  fail_packet.header["src"] = $hostname
+  fail_packet.header["fail"] = true
+  if $connections.has_key?(packet.header["src"])
+    to_send = "MSG" + "\t" + "#{fail_packet.to_json}" + "\n"
+    $connections[packet.header["src"]].puts to_send
+  end
+end
+
+
 def sendmsg(cmd)
   #STDOUT.puts "SENDMSG: not implemented"
   #cmd[0] = DST
@@ -384,8 +406,6 @@ def sendmsg(cmd)
   payload_len = payload.bytesize
   tracker = 0
   offset = 0
-  puts "Payload len: #{payload_len}"
-  puts "Max Payload: #{$maxPayload}"
   while payload_len > $maxPayload || err_flag == true
     if $rout_tbl.has_key?(cmd[0])
       msg_packet = Packet.new
@@ -396,7 +416,7 @@ def sendmsg(cmd)
       msg_packet.header["offset"] = offset
       msg_packet.header["mf"] = true
       msg_packet.msg = payload[tracker..(tracker + $maxPayload - 1)]
-      
+      puts msg_packet.msg
       tracker = tracker + $maxPayload
       payload_len = payload_len - $maxPayload
       offset = offset + $maxPayload
@@ -425,7 +445,34 @@ def sendmsg(cmd)
 end
 
 def ping(cmd)
-	STDOUT.puts "PING: not implemented"
+  #STDOUT.puts "PING: not implemented"
+  #cmd[0] = DST
+  #cmd[1] = NUMPINGS
+  #cmd[2] = DELAY (between pings)
+  dst = cmd[0]
+  pings = cmd[1].to_i
+  delay = cmd[2].to_i
+  seq_id = 0
+  start_time = -1
+  end_time = -1
+  ping_packet = Packet.new
+  ping_packet.header["ping"] = true
+  while pings > 0
+    if $rout_tbl.has_key?(dst)
+      next_hop = $rout_tbl[dst][0].name #next_hop router name
+      to_send = "MSG" + "\t" + "#{ping_packet.to_json}" + "\n"
+      ping_packet.header["sent_time"] = $time
+      $connections[next_hop].puts to_send
+      
+    else
+      STDOUT.puts "PING ERROR: HOST UNREACHABLE"
+    end
+    pings = pings - 1
+    sleep delay
+    puts "PING!"
+  end
+
+
 end
 
 def traceroute(cmd)
