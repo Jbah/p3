@@ -21,6 +21,7 @@ $pingTimeout = nil
 $packet_buffer = []
 $buffered_packets = 0
 $ID_counter = 0
+$ping_responses = []
 #Also https://en.wikipedia.org/wiki/Link-state_routing_protocol#Distributing_maps
 $mutex = Mutex.new
 $rout_tbl = Hash.new
@@ -105,6 +106,9 @@ def queue_loop()
 
           if packet.header["ping"] == true
             if packet.header["ping_src"] == $hostname
+              
+              $ping_responses[packet.header["seq_num"]] = 1
+              
               start = packet.header["sent_time"].split("\s")
               date = start[0].split("-")
               time = start[1].split(":")
@@ -112,7 +116,6 @@ def queue_loop()
               sent_time = Time.new(date[0].to_i,date[1].to_i,date[2].to_i, 
                                time[0].to_i,time[1].to_i,time[2].to_i,
                                zone)
-              puts sent_time
               finish = Time.now
               rtt =  finish - sent_time
               STDOUT.puts "#{packet.header["seq_num"]} #{src} #{rtt}"
@@ -473,6 +476,16 @@ def sendmsg(cmd)
   $ID_counter = $ID_counter + 1
 end
 
+def check_timeout(seq_id)
+  sleep $pingTimeout
+  $mutex.synchronize do
+    if $ping_responses[seq_id] == 0
+      puts $ping_responses
+      STDOUT.puts "PING ERROR: HOST UNREACHABLE"
+    end
+  end
+end
+
 def ping(cmd)
   #STDOUT.puts "PING: not implemented"
   #cmd[0] = DST
@@ -488,15 +501,17 @@ def ping(cmd)
   ping_packet.header["ping"] = true
   ping_packet.header["ping_src"] = $hostname
   ping_packet.header["seq_num"] = seq_id
+  $ping_responses[seq_id] = 0
   while pings > 0
-    
     if $rout_tbl.has_key?(dst)
       next_hop = $rout_tbl[dst][0].name #next_hop router name
       ping_packet.header["sent_time"] = Time.now
       ping_packet.header["seq_num"] = seq_id
       to_send = "MSG" + "\t" + "#{ping_packet.to_json}" + "\n"
-      
       $connections[next_hop].puts to_send
+      Thread.new do
+        check_timeout(seq_id)
+      end
     else
       STDOUT.puts "PING ERROR: HOST UNREACHABLE"
     end
