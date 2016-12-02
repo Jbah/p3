@@ -98,16 +98,48 @@ def queue_loop()
 
         elsif line.include? "MSG"
           arr = line.split("\t")
-          puts arr.last
           packet = Packet.new
           packet.from_json! arr.last
           dst = packet.header["dst"]
+          src = packet.header["src"]
+
           if packet.header["ping"] == true
-            if dst == $hostname
+            if packet.header["ping_src"] == $hostname
+              start = packet.header["sent_time"].split("\s")
+              date = start[0].split("-")
+              time = start[1].split(":")
+              zone = start[2][0..2] + ":" + start[2][3..4]
+              sent_time = Time.new(date[0].to_i,date[1].to_i,date[2].to_i, 
+                               time[0].to_i,time[1].to_i,time[2].to_i,
+                               zone)
+              puts sent_time
+              finish = Time.now
+              rtt =  finish - sent_time
+              STDOUT.puts "#{packet.header["seq_num"]} #{src} #{rtt}"
               
+            elsif dst == $hostname
+              response_ping = Packet.new
+              response_ping.header["dst"] = src
+              response_ping.header["src"] = dst
+              response_ping.header["ping"] = true
+              response_ping.header["ping_src"] = src
+              response_ping.header["sent_time"] = packet.header["sent_time"]
+              response_ping.header["seq_num"] = packet.header["seq_num"]
+              
+              if $rout_tbl.has_key?(src)
+                
+                next_hop = $rout_tbl[src][0].name #next_hop router name
+                to_send = "MSG" + "\t" + "#{response_ping.to_json}" + "\n"
+                $connections[next_hop].puts to_send
+              end
               
             else
               
+              if $rout_tbl.has_key?(dst)
+                next_hop = $rout_tbl[dst][0].name #next_hop router name
+                to_send = "MSG" + "\t" + "#{packet.to_json}" + "\n"
+                $connections[next_hop].puts to_send
+              end
             end
           elsif packet.header["fail"] == true
             
@@ -450,23 +482,28 @@ def ping(cmd)
   pings = cmd[1].to_i
   delay = cmd[2].to_i
   seq_id = 0
-  start_time = -1
-  end_time = -1
   ping_packet = Packet.new
+  ping_packet.header["dst"] = dst
+  ping_packet.header["src"] = $hostname
   ping_packet.header["ping"] = true
+  ping_packet.header["ping_src"] = $hostname
+  ping_packet.header["seq_num"] = seq_id
   while pings > 0
+    
     if $rout_tbl.has_key?(dst)
       next_hop = $rout_tbl[dst][0].name #next_hop router name
+      ping_packet.header["sent_time"] = Time.now
+      ping_packet.header["seq_num"] = seq_id
       to_send = "MSG" + "\t" + "#{ping_packet.to_json}" + "\n"
-      ping_packet.header["sent_time"] = $time
-      $connections[next_hop].puts to_send
       
+      $connections[next_hop].puts to_send
     else
       STDOUT.puts "PING ERROR: HOST UNREACHABLE"
     end
     pings = pings - 1
+    seq_id = seq_id + 1
     sleep delay
-    puts "PING!"
+    
   end
 
 

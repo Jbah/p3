@@ -7,7 +7,8 @@ class Packet < JSONable
   def initialize
     @header = {"dst" => nil, "src" => nil, "ID"=>nil,
       "len" => 0, "offset" => 0, "mf" => false, "trace"=>false,
-    "hop_count" => 0,"ping" => false, "fail" => false, "sent_time" => 0}
+    "hop_count" => 0,"ping" => false, "fail" => false, "sent_time" => 0,
+    "ping_src"=>nil, "seq_num"=>0}
     @msg = ""
   end
 
