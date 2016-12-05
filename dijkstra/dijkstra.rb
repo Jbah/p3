@@ -10,7 +10,6 @@ class Dijkstra
     @path_to = {}
     @distance_to = {}
     @pq = PriorityQueue.new
-
     compute_shortest_path
   end
 
@@ -57,13 +56,13 @@ class Dijkstra
   # path to a given node is still valid (i.e. we didn't find an even
   # shorter path).
   def relax(edge)
-    return if @distance_to[edge.to] <= @distance_to[edge.from] + edge.weight
-
-    @distance_to[edge.to] = @distance_to[edge.from] + edge.weight
-    @path_to[edge.to] = edge.from
-
-    # If the node is already in this priority queue, the only that happens is
-    # that its distance is decreased.
-    @pq.insert(edge.to, @distance_to[edge.to])
+      return if @distance_to[edge.to] <= @distance_to[edge.from] + edge.weight
+      
+      @distance_to[edge.to] = @distance_to[edge.from] + edge.weight
+      @path_to[edge.to] = edge.from
+      
+      # If the node is already in this priority queue, the only that happens is
+      # that its distance is decreased.
+      @pq.insert(edge.to, @distance_to[edge.to])
   end
 end

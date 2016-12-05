@@ -238,7 +238,7 @@ def edgeb(cmd)
       $connections[cmd[2]].puts to_send
       #puts to_send
       #$sockfd.close
-      send_link_state()
+      send_link_state
     end
   #end
 
@@ -332,8 +332,8 @@ def update_topography(link_state_hash, seq_number, sender, mesg)
     # end
  # end
   send_along_link_state(mesg)
-  #$mutex.synchronize do
-    run_dijkstras()
+  # $mutex.synchronize do  
+  run_dijkstras()
   #end
 end
 
@@ -347,22 +347,28 @@ def send_along_link_state(mesg)
 
 end
 
-#TODO figure out when the fuck to call this shit, need timer or something to make sure all link states have propogated
+#TODO 
 # creates dijkstra object that contains all shortest paths and update routing table
 def run_dijkstras()
     $mutex.synchronize do
-      #$dijkstra = Dijkstra.new($topography, $nodes[$hostname])
+    puts $topography.edges
+    fd = File.open($hostname + "test", "a")
+    fd.puts "_________________________________"
+    fd.puts $topography.edges
+    fd.puts $nodes[$hostname]
     $dijkstra = Dijkstra.new($topography, $nodes[$hostname])
+    fd.puts "Djikstra done\n"
+    fd.close
     end
     $mutex.synchronize do
 
-      $nodes.each do |name, value|
+    $nodes.each do |name, value|
         if name != $hostname
           
             path = $dijkstra.shortest_path_to(value)
             $rout_tbl[name] = [$dijkstra.shortest_path_to(value)[1],$dijkstra.distance_to[value]
 ]
-        
+         
           
         end
       end
@@ -481,7 +487,7 @@ def check_timeout(seq_id)
   $mutex.synchronize do
     if $ping_responses[seq_id] == 0
       puts $ping_responses
-      STDOUT.puts "PING ERROR: HOST UNREACHABLE"
+      STDOUT.puts "PING ERROR: HOST UNREACHABLE (TIMEOUT)" 
     end
   end
 end
@@ -504,6 +510,7 @@ def ping(cmd)
   $ping_responses[seq_id] = 0
   while pings > 0
     if $rout_tbl.has_key?(dst)
+          
       next_hop = $rout_tbl[dst][0].name #next_hop router name
       ping_packet.header["sent_time"] = Time.now
       ping_packet.header["seq_num"] = seq_id
