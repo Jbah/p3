@@ -30,7 +30,7 @@ $seq_number = Hash.new
 
 $connections = Hash.new # stores open tcpconnections by dst node name
 
-$nodes = Hash.new # Stores Node object by name for use with $topography
+$local_nodes = Hash.new # Stores Node object by name for use with $topography
 $server = nil
 #$sockfd = nil
 #Note: May not be necessary
@@ -55,7 +55,9 @@ def server_init()
     $threads << Thread.start($server.accept) do |client|
       loop {
         line = client.gets.chomp
-        $queue.push(line)
+        $mutex.synchronize do
+          $queue.push(line)
+        end
       }
     end
   }
@@ -71,15 +73,15 @@ def queue_loop()
           line = $queue.shift
         #puts line
         end
-        STDOUT.puts line
-        STDOUT.puts "+++++++++++++++++++++++++++++"
-        if line.include? "EDGEB "
+        # STDOUT.puts line
+        # STDOUT.puts "+++++++++++++++++++++++++++++"
+        if line.include? "EDGEB"
           #puts "EDGEB"
           line = (line + " 1\n").strip()
           arr = line.split(' ')
           #puts arr[1..4]
           #$mutex.synchronize do
-          edgeb(arr[1..4])
+          edgeb(arr[1..4],true)
           #end
           #edgeb(arr)
         elsif line.include? "LINKSTATE"
@@ -101,7 +103,7 @@ def queue_loop()
           args = arr[1..-1]
           dumptable(args,true)
 
-        elsif line.include? "EDGEBLOCAL"
+        elsif line.include? "LEDGE"
           arr = line.split(' ')
           cmd = arr[0]
           args = arr[1..-1]
@@ -229,9 +231,9 @@ def edgeb(cmd, bool=false)
     $rout_tbl[cmd[2]] = [cmd[2],1]
     $seq_number[cmd[2]] = -1
     $mutex.synchronize do
-      $nodes[cmd[2]] = Node.new(cmd[2])
-      $topography.add_node($nodes[cmd[2]])
-      $topography.add_edge($nodes[$hostname],$nodes[cmd[2]],1)
+      $local_nodes[cmd[2]] = Node.new(cmd[2])
+      $topography.add_node($local_nodes[cmd[2]])
+      $topography.add_edge($local_nodes[$hostname],$local_nodes[cmd[2]],1)
     end
     # Store new connection in hash
     #puts cmd[3]
@@ -251,7 +253,7 @@ def edgeb(cmd, bool=false)
     end
   else
     $mutex.synchronize do
-      $queue.push("EDGEBLOCAL " + cmd.join(" "))
+      $queue.push("LEDGE " + cmd.join(" "))
     end
   end
 
@@ -305,32 +307,33 @@ def update_topography(link_state_hash, seq_number, sender, mesg)
   ######$rout_tbl['sender'][2] = seq_number
   #$mutex.synchronize do
     $seq_number[sender] = seq_number
-    # add sender to $nodes if not present
+    # add sender to $local_nodes if not present
     $mutex.synchronize do
-      unless $nodes.has_key?(sender)
-        $nodes[sender] = Node.new(sender)
+      unless $local_nodes.has_key?(sender)
+        $local_nodes[sender] = Node.new(sender)
+        $topography.add_node($local_nodes[sender])
       end
     end
     # update topography
     link_state_hash.each do |key,value|
       $mutex.synchronize do
-        unless $nodes.has_key?(key)
-          $nodes[key] = Node.new(key)
+        unless $local_nodes.has_key?(key)
+          $local_nodes[key] = Node.new(key)
         end
       end
       $mutex.synchronize do
-        unless $topography.has_node?($nodes[key])
-          $topography.add_node($nodes[key])
+        unless $topography.has_node?($local_nodes[key])
+          $topography.add_node($local_nodes[key])
         end
-        $topography.add_edge($nodes[sender],$nodes[key],value[1])
+        $topography.add_edge($local_nodes[sender],$local_nodes[key],value[1])
       end
     end
     #Remove any edges that have been removed from the network from the local topography
-    edges_l = $topography.get_edges_from_node($nodes[sender])
+    edges_l = $topography.get_edges_from_node($local_nodes[sender])
     edges_r = []
     link_state_hash.each do |key,value|
-      edges_r.push(Edge.new($nodes[sender],$nodes[key],0))
-      edges_r.push(Edge.new($nodes[key],$nodes[sender],0))
+      edges_r.push(Edge.new($local_nodes[sender],$local_nodes[key],0))
+      edges_r.push(Edge.new($local_nodes[key],$local_nodes[sender],0))
     end
     # puts edges_l[0] == edges_r[1]
     # puts edges_l
@@ -368,16 +371,16 @@ def run_dijkstras()
     fd = File.open($hostname + "test", "a")
     fd.puts "_________________________________"
     fd.puts $topography.edges
-    fd.puts $nodes[$hostname]
-    #fd.puts $nodes.keys
-    #fd.puts $nodes.values
-    $dijkstra = Dijkstra.new($topography, $nodes[$hostname])
+    fd.puts $local_nodes[$hostname]
+    #fd.puts $local_nodes.keys
+    #fd.puts $local_nodes.values
+    $dijkstra = Dijkstra.new($topography, $local_nodes[$hostname])
     fd.puts "Djikstra done\n"
     fd.close
     end
     $mutex.synchronize do
 
-    $nodes.each do |name, value|
+    $local_nodes.each do |name, value|
         if name != $hostname
             path = $dijkstra.shortest_path_to(value)
             $rout_tbl[name] = [$dijkstra.shortest_path_to(value)[1],$dijkstra.distance_to[value]]
@@ -411,7 +414,7 @@ end
 
 #Both edged and edgeu need to call send_link_state
 def edged(cmd)
-  $topography.remove_edge($nodes[$hostname],$nodes[cmd[0]])
+  $topography.remove_edge($local_nodes[$hostname],$local_nodes[cmd[0]])
   $connections.delete(cmd[0])
   send_link_state
   
@@ -419,7 +422,7 @@ def edged(cmd)
 end
 
 def edgeu(cmd)
-  $topography.add_edge($nodes[$hostname],$nodes[cmd[0]],cmd[1].to_i)
+  $topography.add_edge($local_nodes[$hostname],$local_nodes[cmd[0]],cmd[1].to_i)
   send_link_state
   
 	#STDOUT.puts "EDGEU: not implemented"
@@ -636,8 +639,8 @@ def setup(hostname, port)
   $port = port
 
   #set up ports, server, buffers
-  $nodes[$hostname] = Node.new($hostname)
-  $topography.add_node($nodes[$hostname])
+  $local_nodes[$hostname] = Node.new($hostname)
+  $topography.add_node($local_nodes[$hostname])
   Thread.new do
     server_init
   end
