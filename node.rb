@@ -64,12 +64,16 @@ end
 def queue_loop()
     loop {
       if $queue.length > 0
-        # puts "++++++++++++++++++++++"
-        # puts $queue
-        #$mutex.synchronize do
+        #puts "++++++++++++++++++++++"
+        #puts $queue
+        line = ""
+        $mutex.synchronize do
           line = $queue.shift
-        #end
-        if line.include? "EDGEB"
+        #puts line
+        end
+        STDOUT.puts line
+        STDOUT.puts "+++++++++++++++++++++++++++++"
+        if line.include? "EDGEB "
           #puts "EDGEB"
           line = (line + " 1\n").strip()
           arr = line.split(' ')
@@ -97,6 +101,16 @@ def queue_loop()
           args = arr[1..-1]
           dumptable(args,true)
 
+        elsif line.include? "EDGEBLOCAL"
+          arr = line.split(' ')
+          cmd = arr[0]
+          args = arr[1..-1]
+          edgeb(args,true)
+
+        elsif line.include? "SENDLSTATE"
+          #puts "test"
+          send_link_state()
+
         elsif line.include? "MSG"
           arr = line.split("\t")
           packet = Packet.new
@@ -105,6 +119,7 @@ def queue_loop()
           src = packet.header["src"]
 
           if packet.header["ping"] == true
+            #puts "============================"
             if packet.header["ping_src"] == $hostname
               
               $ping_responses[packet.header["seq_num"]] = 1
@@ -208,11 +223,8 @@ def queue_loop()
 end
 
 
-def edgeb(cmd)
-  #TODO Test if this still works
-  # HAS NOT BEEN TESTED
-  ################################
-
+def edgeb(cmd, bool=false)
+  if bool
     # update routing table, neighbors, and topography
     $rout_tbl[cmd[2]] = [cmd[2],1]
     $seq_number[cmd[2]] = -1
@@ -221,9 +233,6 @@ def edgeb(cmd)
       $topography.add_node($nodes[cmd[2]])
       $topography.add_edge($nodes[$hostname],$nodes[cmd[2]],1)
     end
-
-
-    #################################
     # Store new connection in hash
     #puts cmd[3]
 
@@ -240,7 +249,11 @@ def edgeb(cmd)
       #$sockfd.close
       send_link_state
     end
-  #end
+  else
+    $mutex.synchronize do
+      $queue.push("EDGEBLOCAL " + cmd.join(" "))
+    end
+  end
 
 end
 
@@ -351,11 +364,13 @@ end
 # creates dijkstra object that contains all shortest paths and update routing table
 def run_dijkstras()
     $mutex.synchronize do
-    puts $topography.edges
+    #puts $topography.edges
     fd = File.open($hostname + "test", "a")
     fd.puts "_________________________________"
     fd.puts $topography.edges
     fd.puts $nodes[$hostname]
+    #fd.puts $nodes.keys
+    #fd.puts $nodes.values
     $dijkstra = Dijkstra.new($topography, $nodes[$hostname])
     fd.puts "Djikstra done\n"
     fd.close
@@ -364,12 +379,8 @@ def run_dijkstras()
 
     $nodes.each do |name, value|
         if name != $hostname
-          
             path = $dijkstra.shortest_path_to(value)
-            $rout_tbl[name] = [$dijkstra.shortest_path_to(value)[1],$dijkstra.distance_to[value]
-]
-         
-          
+            $rout_tbl[name] = [$dijkstra.shortest_path_to(value)[1],$dijkstra.distance_to[value]]
         end
       end
     end
@@ -380,8 +391,10 @@ end
 
 # Send link state update to all neighbors
 def send_link_state()
+  #puts "sending link state"
   run_dijkstras
   #create and populate hash of neighbors to send with link state message
+  #puts "dijkstras"
   neighbors = Hash.new()
   $connections.each do |key,connection|
     #first and second element of array into neighbors hash
@@ -593,6 +606,7 @@ def main()
         when "TRACEROUTE"; traceroute(args)
         when "FTP"; ftp(args)
         when "stats"; puts $topography.edges
+        when "tbl"; puts $connections
       else STDERR.puts "ERROR: INVALID COMMAND \"#{cmd}\""
       end
     end
@@ -639,7 +653,10 @@ def setup(hostname, port)
   Thread.new do
     
     loop {
-      send_link_state
+      $mutex.synchronize do
+        $queue.push("SENDLSTATE")
+      end
+      #send_link_state
       sleep $updateInterval
     }
   end
