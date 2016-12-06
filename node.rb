@@ -120,7 +120,47 @@ def queue_loop()
           dst = packet.header["dst"]
           src = packet.header["src"]
 
-          if packet.header["ping"] == true
+          if packet.header["trace"] == true
+            if packet.header["ping_src"] == $hostname
+              hopcount = packet.header["seq_num"]
+              time_to_node = packet.header["sent_time"]
+              hostID = packet.header["src"]
+
+              STDOUT.puts "#{hopcount} #{hostID} #{time_to_node}"
+              
+            else
+              trace_response = Packet.new
+              trace_response.header["dst"] = src
+              trace_response.header["src"] = dst
+              trace_response.header["trace"] = true
+              trace_response.header["ping_src"] = packet.header["ping_src"]
+              trace_response.header["seq_num"] = packet.header["seq_num"]
+
+              start = packet.header["sent_time"].split("\s")
+              date = start[0].split("-")
+              time = start[1].split(":")
+              zone = start[2][0..2] + ":" + start[2][3..4]
+              sent_time = Time.new(date[0].to_i,date[1].to_i,date[2].to_i, 
+                               time[0].to_i,time[1].to_i,time[2].to_i,
+                               zone)
+              trace_response.header["sent_time"] = Time.now - sent_time
+              
+                
+              if $rout_tbl.has_key?(src)
+                next_hop = $rout_tbl[src][0].name #next_hop router name
+                to_send = "MSG" + "\t" + "#{trace_response.to_json}" + "\n"
+                $connections[next_hop].puts to_send
+
+              end
+              if $rout_tbl.has_key?(dst)
+                packet.header["seq_num"] = packet.header["seq_num"] + 1
+                next_hop = $rout_tbl[dst][0].name #next_hop router name
+                to_send = "MSG" + "\t" + "#{packet.to_json}" + "\n"
+                $connections[next_hop].puts to_send
+              end
+              
+            end
+          elsif packet.header["ping"] == true
             #puts "============================"
             if packet.header["ping_src"] == $hostname
               
@@ -385,16 +425,14 @@ def run_dijkstras()
     $local_nodes.each do |name, value|
         if name != $hostname
           if $dijkstra != nil
-            if $rout_tbl.has_key?(name)
               path = $dijkstra.shortest_path_to(value)
               $rout_tbl[name] = [$dijkstra.shortest_path_to(value)[1],$dijkstra.distance_to[value]]         
-            end
           end
         end
     end
 
     end
-  fd.close
+#  fd.close
   #end
   
 end
@@ -571,20 +609,19 @@ end
 def traceroute(cmd)
   # STDOUT.puts "TRACEROUTE: not implemented"
   # cmd[0] = dst
-  hopcount = 0
   dst = cmd[0]
   trace_packet = Packet.new
   trace_packet.header["dst"] = dst
   trace_packet.header["src"] = $hostname
-  trace_packet.header["ping"] = true
+  trace_packet.header["seq_num"] = 1
   trace_packet.header["ping_src"] = $hostname
-  trace_packet.header["seq_num"] = hopcount
   trace_packet.header["trace"] = true
+  trace_packet.header["sent_time"] = Time.now
   if $rout_tbl.has_key?(dst)
     next_hop = $rout_tbl[dst][0].name
-    trace.header["sent_time"] = Time.now
     to_send = "MSG" + "\t" + "#{trace_packet.to_json}" + "\n"
     $connections[next_hop].puts to_send
+    STDOUT.puts "0 " + "#{$hostname}" + " 0"
   else
     STDOUT.puts "ERROR: No path"
   end
