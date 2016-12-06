@@ -66,8 +66,8 @@ end
 def queue_loop()
     loop {
       if $queue.length > 0
-        puts "++++++++++++++++++++++"
-        puts $queue
+       # puts "++++++++++++++++++++++"
+       # puts $queue
         line = ""
         $mutex.synchronize do
           line = $queue.shift
@@ -366,18 +366,18 @@ end
 #TODO 
 # creates dijkstra object that contains all shortest paths and update routing table
 def run_dijkstras()
-  fd = File.open($hostname + "test", "a")
+ # fd = File.open($hostname + "test", "a")
     $mutex.synchronize do
     #puts $topography.edges
     
-    fd.puts "_________________________________"
-    fd.puts $topography.edges
-    fd.puts $rout_tbl
-    fd.puts $local_nodes[$hostname]
+  #  fd.puts "_________________________________"
+  #  fd.puts $topography.edges
+  #  fd.puts $rout_tbl
+  #  fd.puts $local_nodes[$hostname]
     #fd.puts $local_nodes.keys
     #fd.puts $local_nodes.values
     $dijkstra = Dijkstra.new($topography, $local_nodes[$hostname])
-    fd.puts "Djikstra done\n"
+  #  fd.puts "Djikstra done\n"
    
     
     end
@@ -408,7 +408,7 @@ def send_link_state()
  #   puts exception.backtrace
  #   raise
  #end
-  puts "made it"
+ # puts "made it"
   #create and populate hash of neighbors to send with link state message
   #puts "dijkstras"
   neighbors = Hash.new()
@@ -547,7 +547,6 @@ def ping(cmd)
   while pings > 0
     $ping_responses[seq_id] = 0
     if $rout_tbl.has_key?(dst)
-      puts $rout_tbl
       next_hop = $rout_tbl[dst][0].name #next_hop router name
       ping_packet.header["sent_time"] = Time.now
       ping_packet.header["seq_num"] = seq_id
@@ -570,7 +569,26 @@ def ping(cmd)
 end
 
 def traceroute(cmd)
-	STDOUT.puts "TRACEROUTE: not implemented"
+  # STDOUT.puts "TRACEROUTE: not implemented"
+  # cmd[0] = dst
+  hopcount = 0
+  dst = cmd[0]
+  trace_packet = Packet.new
+  trace_packet.header["dst"] = dst
+  trace_packet.header["src"] = $hostname
+  trace_packet.header["ping"] = true
+  trace_packet.header["ping_src"] = $hostname
+  trace_packet.header["seq_num"] = hopcount
+  trace_packet.header["trace"] = true
+  if $rout_tbl.has_key?(dst)
+    next_hop = $rout_tbl[dst][0].name
+    trace.header["sent_time"] = Time.now
+    to_send = "MSG" + "\t" + "#{trace_packet.to_json}" + "\n"
+    $connections[next_hop].puts to_send
+  else
+    STDOUT.puts "ERROR: No path"
+  end
+  
 end
 
 def ftp(cmd)
