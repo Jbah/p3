@@ -66,8 +66,8 @@ end
 def queue_loop()
     loop {
       if $queue.length > 0
-        #puts "++++++++++++++++++++++"
-        #puts $queue
+        puts "++++++++++++++++++++++"
+        puts $queue
         line = ""
         $mutex.synchronize do
           line = $queue.shift
@@ -366,45 +366,62 @@ end
 #TODO 
 # creates dijkstra object that contains all shortest paths and update routing table
 def run_dijkstras()
+  fd = File.open($hostname + "test", "a")
     $mutex.synchronize do
     #puts $topography.edges
-    fd = File.open($hostname + "test", "a")
+    
     fd.puts "_________________________________"
     fd.puts $topography.edges
+    fd.puts $rout_tbl
     fd.puts $local_nodes[$hostname]
     #fd.puts $local_nodes.keys
     #fd.puts $local_nodes.values
     $dijkstra = Dijkstra.new($topography, $local_nodes[$hostname])
     fd.puts "Djikstra done\n"
-    fd.close
+   
+    
     end
-    $mutex.synchronize do
-
+  $mutex.synchronize do
     $local_nodes.each do |name, value|
         if name != $hostname
-            path = $dijkstra.shortest_path_to(value)
-            $rout_tbl[name] = [$dijkstra.shortest_path_to(value)[1],$dijkstra.distance_to[value]]
+          if $dijkstra != nil
+            if $rout_tbl.has_key?(name)
+              path = $dijkstra.shortest_path_to(value)
+              $rout_tbl[name] = [$dijkstra.shortest_path_to(value)[1],$dijkstra.distance_to[value]]         
+            end
+          end
         end
-      end
     end
 
+    end
+  fd.close
   #end
-
+  
 end
 
 # Send link state update to all neighbors
 def send_link_state()
   #puts "sending link state"
-  run_dijkstras
+ # begin
+    run_dijkstras
+ # rescue => exception
+ #   puts exception.backtrace
+ #   raise
+ #end
+  puts "made it"
   #create and populate hash of neighbors to send with link state message
   #puts "dijkstras"
   neighbors = Hash.new()
   $connections.each do |key,connection|
     #first and second element of array into neighbors hash
+    
     $mutex.synchronize do
-      neighbors[key] = $rout_tbl[key]
+      if $rout_tbl.has_key?(key)
+        neighbors[key] = $rout_tbl[key]
+        end
     end
   end
+
   to_send = "LINKSTATE" + "\t" + "#{$hostname}" + "\t" + "#{$sequence_number}"  + "\t" + "#{neighbors.to_json}" + "\n"
   $connections.each do |key,connection|
     connection.puts to_send
@@ -414,7 +431,11 @@ end
 
 #Both edged and edgeu need to call send_link_state
 def edged(cmd)
+  puts "DELETE"
   $topography.remove_edge($local_nodes[$hostname],$local_nodes[cmd[0]])
+  $local_nodes.delete(cmd[0])
+  $rout_tbl.delete(cmd[0])
+  puts $rout_tbl
   $connections.delete(cmd[0])
   send_link_state
   
@@ -500,9 +521,9 @@ end
 
 def check_timeout(seq_id)
   sleep $pingTimeout
+  puts $ping_responses[seq_id]
   $mutex.synchronize do
     if $ping_responses[seq_id] == 0
-      puts $ping_responses
       STDOUT.puts "PING ERROR: HOST UNREACHABLE (TIMEOUT)" 
     end
   end
@@ -523,16 +544,17 @@ def ping(cmd)
   ping_packet.header["ping"] = true
   ping_packet.header["ping_src"] = $hostname
   ping_packet.header["seq_num"] = seq_id
-  $ping_responses[seq_id] = 0
   while pings > 0
+    $ping_responses[seq_id] = 0
     if $rout_tbl.has_key?(dst)
-          
+      puts $rout_tbl
       next_hop = $rout_tbl[dst][0].name #next_hop router name
       ping_packet.header["sent_time"] = Time.now
       ping_packet.header["seq_num"] = seq_id
       to_send = "MSG" + "\t" + "#{ping_packet.to_json}" + "\n"
       $connections[next_hop].puts to_send
       Thread.new do
+        puts "check timeout"
         check_timeout(seq_id)
       end
     else
