@@ -358,16 +358,17 @@ def queue_loop()
           id = packet.header["circ_id"]
           path = packet.header["circ_path"]
           current_hop = packet.header["next_hop"]
-          if packet.header["circ_path"][0] == $hostname
+          if path[0] == $hostname
             if src == path.last && packet.header["circ_success"] == true
               STDOUT.puts "CIRCUITB #{id} --> #{path.last} over #{path.length-2}"
             
             elsif packet.header["circ_success"] == false
-              STDOUT.puts "CIRCUIT ERROR: #{$hostname} -/-> #{path.last} at #{packet.header["circ_fail"]}"
+              STDOUT.puts "CIRCUIT ERROR: #{$hostname} -/-> #{path.last} FAILED AT #{packet.header["circ_fail"]}"
             end
           elsif dst == $hostname
             if !$circuit_member.include?(id)
               $circuit_member.push(id)
+              $circuits[id] = path
               if $rout_tbl.has_key?(src)
                 next_hop = $rout_tbl[src][0].name
                 packet.header["dst"] = src
@@ -378,7 +379,12 @@ def queue_loop()
                 $connections[next_hop].puts to_send
               end
               STDOUT.puts "CIRCUIT #{src}/#{id} --> #{$hostname} over #{path.length-2}"
+            else
+
+              
             end
+
+            
           elsif packet.header["circ_response"] == true
             if $rout_tbl.has_key?(dst)
                 next_hop = $rout_tbl[dst][0].name
@@ -392,6 +398,7 @@ def queue_loop()
             puts next_node
             if !$circuit_member.include?(id)
               $circuit_member.push(id)
+              $circuits[id] = path
               if $rout_tbl.has_key?(next_node)
                 next_hop = $rout_tbl[next_node][0].name
                 packet.header["next_hop"] = next_node
@@ -410,15 +417,15 @@ def queue_loop()
                 end
               end
               
-              if $rout_tbl.has_key?(src)
-                next_hop = $rout_tbl[src][0].name
-                packet.header["dst"] = src
-                packet.header["src"] = $hostname
-                packet.header["circ_success"] = true
-                packet.header["circ_response"] = true           
-                to_send = "CIRCUITB" + "\t" + "#{packet.to_json}" + "\n"
-                $connections[next_hop].puts to_send
-              end
+             # if $rout_tbl.has_key?(src)
+             #   next_hop = $rout_tbl[src][0].name
+             #   packet.header["dst"] = src
+             #   packet.header["src"] = $hostname
+             #   packet.header["circ_success"] = true
+             #   packet.header["circ_response"] = true           
+             #   to_send = "CIRCUITB" + "\t" + "#{packet.to_json}" + "\n"
+              #  $connections[next_hop].puts to_send
+             # end
             else
               if $rout_tbl.has_key?(src)
                 next_hop = $rout_tbl[src][0].name
@@ -431,6 +438,72 @@ def queue_loop()
               end
               
               
+            end
+          end
+        elsif line.include? "CIRCUITD"
+          line.chomp!
+          arr = line.split("\t")
+          packet = Packet.new
+          packet.from_json! arr.last
+          puts packet.to_json
+          dst = packet.header["dst"]
+          src = packet.header["src"]
+          id = packet.header["circ_id"]
+          path = packet.header["circ_path"]
+          current_hop = packet.header["next_hop"]
+          circ_success = packet.header["circ_success"]
+          if path[0] == $hostname
+            if src == path.last && circ_success == true
+              STDOUT.puts "CIRCUITD #{id} --> #{src} over #{path.length-2}"
+              $circuits.delete(id)
+              $circuit_member.delete(id)
+            elsif packet.header["circ_success"] == false
+              STDOUT.puts "CIRCUIT ERROR: #{$hostname} -/-> #{path.last} FAILED AT #{packet.header["circ_fail"]}"
+            end
+
+          elsif dst == $hostname
+            if $circuit_member.include?(id)
+              $circuits.delete(id)
+              $circuit_member.delete(id)
+              if $rout_tbl.has_key?(src)
+                next_hop = $rout_tbl[src][0].name
+                packet.header["dst"] = src
+                packet.header["src"] = $hostname
+                packet.header["circ_success"] = true
+                packet.header["circ_response"] = true 
+                to_send = "CIRCUITD" + "\t" + "#{packet.to_json}" + "\n"
+                $connections[next_hop].puts to_send
+              end
+
+          end
+          elsif packet.header["circ_response"] == true
+            if $rout_tbl.has_key?(dst)
+              next_hop = $rout_tbl[dst][0].name
+              to_send = "CIRCUITD" + "\t" + "#{packet.to_json}" + "\n"
+              $connections[next_hop].puts to_send
+            end
+          else
+            next_node = path[path.index($hostname) + 1]
+            if $circuit_member.include?(id)
+              $circuit_member.delete(id)
+              $circuits.delete(id)
+              if $rout_tbl.has_key?(next_node)
+                next_hop = $rout_tbl[next_node][0].name
+                packet.header["next_hop"] = next_node
+                to_send = "CIRCUITD" + "\t" + "#{packet.to_json}" + "\n"
+                $connections[next_hop].puts to_send
+              else
+                if $rout_tbl.has_key?(src)
+                  next_hop = $rout_tbl[src][0].name
+                  packet.header["dst"] = src
+                  packet.header["src"] = $hostname
+                  packet.header["circ_success"] = false
+                  packet.header["circ_response"] = true
+                  packet.header["circ_fail"] = next_node
+                  to_send = "CIRCUITD" + "\t" + "#{packet.to_json}" + "\n"
+                  $connections[next_hop].puts to_send
+                end
+              end
             end
           end
         elsif line.include? "SENDMSG FAILURE"
@@ -978,7 +1051,21 @@ end
 
 def circuitd(cmd)
   #STDOUT.puts "CIRCUITD not implemented"
-
+  #cmd[0] = CIRCUITID
+  path = $circuits[cmd[0]]
+  circuitd_packet = Packet.new
+  circuitd_packet.header["dst"] = path.last
+  circuitd_packet.header["src"] = $hostname
+  circuitd_packet.header["circ_path"] = path
+  circuitd_packet.header["next_hop"] = path[1]
+  circuitd_packet.header["circ_id"] = cmd[0]
+  if $rout_tbl.has_key?(path[1])
+    next_hop = $rout_tbl[path[1]][0].name
+    to_send = "CIRCUITD" + "\t" + "#{circuitd_packet.to_json}" + "\n"
+    $connections[next_hop].puts to_send
+  else
+    STDOUT.puts "CIRCUIT ERROR: #{$hostname} -/-> #{cmd[1]} at #{path[1]}"
+  end
   
 end
 
