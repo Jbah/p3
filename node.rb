@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 require 'socket'
 require 'open3'
 require 'csv'
@@ -22,6 +23,8 @@ $packet_buffer = []
 $buffered_packets = 0
 $ID_counter = 0
 $ping_responses = []
+$trace_responses = []
+$trace_buffer = {}
 #Also https://en.wikipedia.org/wiki/Link-state_routing_protocol#Distributing_maps
 $mutex = Mutex.new
 $rout_tbl = Hash.new
@@ -120,22 +123,33 @@ def queue_loop()
           packet.from_json! arr.last
           dst = packet.header["dst"]
           src = packet.header["src"]
-
           if packet.header["trace"] == true
             if packet.header["ping_src"] == $hostname
-              hopcount = packet.header["seq_num"]
+              hop_count = packet.header["seq_num"]
               time_to_node = packet.header["sent_time"]
               hostID = packet.header["src"]
-
-              STDOUT.puts "#{hopcount} #{hostID} #{time_to_node}"
-              
+              $trace_responses[hop_count] = 1 
+              to_store = "#{hop_count} #{hostID} #{time_to_node}"
+              $mutex.synchronize do
+              if !$trace_buffer.has_key?(hop_count)
+                $trace_buffer[hop_count] = to_store
+              end
+              end
+            elsif packet.header["trace_response"] == true
+              if $rout_tbl.has_key?(dst)
+                next_hop = $rout_tbl[dst][0].name #next_hop router name
+                to_send = "MSG" + "\t" + "#{packet.to_json}" + "\n"
+                $connections[next_hop].puts to_send
+              end
             else
               trace_response = Packet.new
               trace_response.header["dst"] = src
-              trace_response.header["src"] = dst
+              trace_response.header["src"] = $hostname
               trace_response.header["trace"] = true
               trace_response.header["ping_src"] = packet.header["ping_src"]
               trace_response.header["seq_num"] = packet.header["seq_num"]
+              trace_response.header["path_length"] = packet.header["path_length"]
+              trace_response.header["trace_response"] = true
 
               start = packet.header["sent_time"].split("\s")
               date = start[0].split("-")
@@ -648,12 +662,14 @@ def sendmsg(cmd)
   $ID_counter = $ID_counter + 1
 end
 
-def check_timeout(seq_id)
-  sleep $pingTimeout
-  puts $ping_responses[seq_id]
-  $mutex.synchronize do
-    if $ping_responses[seq_id] == 0
-      STDOUT.puts "PING ERROR: HOST UNREACHABLE (TIMEOUT)" 
+def check_ping_timeout(seq_id)
+  Thread.new do
+    sleep $pingTimeout
+    puts $ping_responses[seq_id]
+    $mutex.synchronize do
+      if $ping_responses[seq_id] == 0
+        STDOUT.puts "PING ERROR: HOST UNREACHABLE (TIMEOUT)" 
+      end
     end
   end
 end
@@ -681,10 +697,7 @@ def ping(cmd)
       ping_packet.header["seq_num"] = seq_id
       to_send = "MSG" + "\t" + "#{ping_packet.to_json}" + "\n"
       $connections[next_hop].puts to_send
-      Thread.new do
-        puts "check timeout"
-        check_timeout(seq_id)
-      end
+      check_ping_timeout(seq_id)
     else
       STDOUT.puts "PING ERROR: HOST UNREACHABLE"
     end
@@ -697,10 +710,51 @@ def ping(cmd)
 
 end
 
+def flush_trace_buffer(trace_num)
+  Thread.new do
+    printed = false
+    $mutex.synchronize do
+      if $trace_buffer.length == trace_num
+        $trace_buffer.each do |key,value|
+          STDOUT.puts value
+        end
+        printed = true
+    end
+    end
+    if printed == false
+      sleep $pingTimeout
+      $mutex.synchronize do
+        counter = 0
+        while counter < $trace_buffer.length
+          STDOUT.puts $trace_buffer[counter]
+          counter = counter + 1
+        end
+      end
+    end
+  end
+end
+
+def check_trace_timeout(hop_count)
+  Thread.new do
+    sleep $pingTimeout
+    $mutex.synchronize do
+      if $trace_responses[hop_count] == 0
+        if !$trace_buffer.has_key?(hop_count)
+          $trace_buffer[hop_count] = "TIMEOUT on #{hop_count}"
+        end
+      end
+    end
+  end
+end
+
+
 def traceroute(cmd)
   # STDOUT.puts "TRACEROUTE: not implemented"
   # cmd[0] = dst
+  
   dst = cmd[0]
+  path_len = $dijkstra.shortest_path_to($local_nodes[dst]).length
+  hop_count = 0
   trace_packet = Packet.new
   trace_packet.header["dst"] = dst
   trace_packet.header["src"] = $hostname
@@ -708,11 +762,24 @@ def traceroute(cmd)
   trace_packet.header["ping_src"] = $hostname
   trace_packet.header["trace"] = true
   trace_packet.header["sent_time"] = Time.now
+  trace_packet.header["path_length"] = path_len
   if $rout_tbl.has_key?(dst)
     next_hop = $rout_tbl[dst][0].name
     to_send = "MSG" + "\t" + "#{trace_packet.to_json}" + "\n"
     $connections[next_hop].puts to_send
-    STDOUT.puts "0 " + "#{$hostname}" + " 0"
+    $trace_buffer[hop_count] = "0 " + "#{$hostname}" + " 0"
+    hop_count = hop_count + 1
+    counter = 1
+    while counter < path_len
+      $trace_responses[counter] = 0
+      counter = counter + 1
+    end
+    while hop_count < path_len
+      check_trace_timeout(hop_count)
+      hop_count = hop_count + 1
+    end
+    flush_trace_buffer(path_len)
+
   else
     STDOUT.puts "ERROR: No path"
   end
@@ -785,7 +852,17 @@ def ftp(cmd)
   $ID_counter = $ID_counter + 1
 end
 
+def circuitb(cmd)
+  STDOUT.puts "CIRCUITB not implemented"
+end
 
+def circuitm(cmd)
+  STDOUT.puts "CIRCUITM not implemented"
+end
+
+def circuitd(cmd)
+  STDOUT.puts "CIRCUITD not implemented"
+end
 
 
 # do main loop here....
@@ -854,6 +931,9 @@ def main()
         when "PING"; ping(args)
         when "TRACEROUTE"; traceroute(args)
         when "FTP"; ftp(args)
+        when "CIRCUITB"; circuitb(args)
+        when "CIRCUITM"; circuitm(args)
+        when "CIRCUITD"; circuitd(args)
         when "stats"; puts $topography.edges
         when "tbl"; puts $connections
       else STDERR.puts "ERROR: INVALID COMMAND \"#{cmd}\""
