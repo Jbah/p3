@@ -127,6 +127,7 @@ def queue_loop()
           dst = packet.header["dst"]
           src = packet.header["src"]
           if packet.header["trace"] == true
+            path = packet.header["circ_path"]
             if packet.header["ping_src"] == $hostname
               hop_count = packet.header["seq_num"]
               time_to_node = packet.header["sent_time"]
@@ -139,12 +140,20 @@ def queue_loop()
               end
               end
             elsif packet.header["trace_response"] == true
-              if $rout_tbl.has_key?(dst)
-                next_hop = $rout_tbl[dst][0].name #next_hop router name
+              if path != nil
+                next_node = path[path.index($hostname)-1]
+                rout_cond = $rout_tbl.has_key?(next_node)
+                next_hop = $rout_tbl[next_node][0].name
+              else
+                rout_cond = $rout_tbl.has_key?(src)
+                next_hop = $rout_tbl[src][0].name 
+              end
+              if rout_cond
                 to_send = "MSG" + "\t" + "#{packet.to_json}" + "\n"
                 $connections[next_hop].puts to_send
               end
             else
+              
               trace_response = Packet.new
               trace_response.header["dst"] = src
               trace_response.header["src"] = $hostname
@@ -153,6 +162,7 @@ def queue_loop()
               trace_response.header["seq_num"] = packet.header["seq_num"]
               trace_response.header["path_length"] = packet.header["path_length"]
               trace_response.header["trace_response"] = true
+              trace_response.header["circ_path"] = path
 
               start = packet.header["sent_time"].split("\s")
               date = start[0].split("-")
@@ -163,18 +173,31 @@ def queue_loop()
                                zone)
               trace_response.header["sent_time"] = Time.now - sent_time
               
-                
-              if $rout_tbl.has_key?(src)
-                next_hop = $rout_tbl[src][0].name #next_hop router name
-                to_send = "MSG" + "\t" + "#{trace_response.to_json}" + "\n"
-                $connections[next_hop].puts to_send
-
+              if path != nil
+                next_node1 = path[path.index($hostname)-1]
+                rout_cond1 = $rout_tbl.has_key?(next_node1)
+                next_hop1 = $rout_tbl[next_node1][0].name
+              else
+                rout_cond1 = $rout_tbl.has_key?(src)
+                next_hop1 = $rout_tbl[src][0].name 
               end
-              if $rout_tbl.has_key?(dst)
+              if rout_cond1
+                to_send = "MSG" + "\t" + "#{trace_response.to_json}" + "\n"
+                $connections[next_hop1].puts to_send
+              end
+
+              if path != nil
+                next_node2 = path[path.index($hostname)+1]
+                rout_cond2 = $rout_tbl.has_key?(next_node2)
+                next_hop2 = $rout_tbl[next_node2][0].name
+              else
+                rout_cond2 = $rout_tbl.has_key?(dst)
+                next_hop2 = $rout_tbl[dst][0].name 
+              end
+              if rout_cond
                 packet.header["seq_num"] = packet.header["seq_num"] + 1
-                next_hop = $rout_tbl[dst][0].name #next_hop router name
                 to_send = "MSG" + "\t" + "#{packet.to_json}" + "\n"
-                $connections[next_hop].puts to_send
+                $connections[next_hop2].puts to_send
               end
               
             end
@@ -196,6 +219,7 @@ def queue_loop()
               STDOUT.puts "#{packet.header["seq_num"]} #{src} #{rtt}"
               
             elsif dst == $hostname
+              path = packet.header["circ_path"]
               response_ping = Packet.new
               response_ping.header["dst"] = src
               response_ping.header["src"] = dst
@@ -203,18 +227,37 @@ def queue_loop()
               response_ping.header["ping_src"] = src
               response_ping.header["sent_time"] = packet.header["sent_time"]
               response_ping.header["seq_num"] = packet.header["seq_num"]
-              
-              if $rout_tbl.has_key?(src)
+              response_ping.header["circ_path"] = path
+
+              if path != nil
                 
-                next_hop = $rout_tbl[src][0].name #next_hop router name
+                next_node = path[path.index($hostname)-1]
+                rout_cond = $rout_tbl.has_key?(next_node)
+                next_hop = $rout_tbl[next_node][0].name
+              else
+                rout_cond = $rout_tbl.has_key?(src)
+                next_hop = $rout_tbl[src][0].name 
+              end
+              if rout_cond
                 to_send = "MSG" + "\t" + "#{response_ping.to_json}" + "\n"
                 $connections[next_hop].puts to_send
               end
               
             else
-              
-              if $rout_tbl.has_key?(dst)
-                next_hop = $rout_tbl[dst][0].name #next_hop router name
+              path = packet.header["circ_path"]
+              if dst == packet.header["ping_src"] && path != nil
+                next_node = path[path.index($hostname)-1]
+                rout_cond = $rout_tbl.has_key?(next_node)
+                next_hop = $rout_tbl[next_node][0].name
+              elsif dst != packet.header["ping_src"] && path != nil
+                next_node = path[path.index($hostname)+1]
+                rout_cond = $rout_tbl.has_key?(next_node)
+                next_hop = $rout_tbl[next_node][0].name
+              else
+                rout_cond = $rout_tbl.has_key?(dst)
+                next_hop = $rout_tbl[dst][0].name 
+              end
+              if rout_cond
                 to_send = "MSG" + "\t" + "#{packet.to_json}" + "\n"
                 $connections[next_hop].puts to_send
               end
@@ -886,9 +929,6 @@ def check_ping_timeout(seq_id)
 end
 
 def ping(cmd, *circm)
-  if circm.any?
-    
-  else
   #STDOUT.puts "PING: not implemented"
   #cmd[0] = DST
   #cmd[1] = NUMPINGS
@@ -898,6 +938,15 @@ def ping(cmd, *circm)
   delay = cmd[2].to_i
   seq_id = 0
   ping_packet = Packet.new
+  if circm.any?
+    path = $circuits[circm[0].to_s]
+    rout_cond = $rout_tbl.has_key?(path[1])
+    next_hop = $rout_tbl[path[1]][0].name
+    ping_packet.header["circ_path"] = path
+  else
+    rout_cond = $rout_tbl.has_key?(cmd[0])
+    next_hop = $rout_tbl[cmd[0]][0].name
+  end
   ping_packet.header["dst"] = dst
   ping_packet.header["src"] = $hostname
   ping_packet.header["ping"] = true
@@ -905,8 +954,7 @@ def ping(cmd, *circm)
   ping_packet.header["seq_num"] = seq_id
   while pings > 0
     $ping_responses[seq_id] = 0
-    if $rout_tbl.has_key?(dst)
-      next_hop = $rout_tbl[dst][0].name #next_hop router name
+    if rout_cond
       ping_packet.header["sent_time"] = Time.now
       ping_packet.header["seq_num"] = seq_id
       to_send = "MSG" + "\t" + "#{ping_packet.to_json}" + "\n"
@@ -918,8 +966,6 @@ def ping(cmd, *circm)
     pings = pings - 1
     seq_id = seq_id + 1
     sleep delay
-    
-  end
   end
 
 end
@@ -963,9 +1009,6 @@ end
 
 
 def traceroute(cmd, *circm)
-  if circm.any?
-    
-  else
   # STDOUT.puts "TRACEROUTE: not implemented"
   # cmd[0] = dst
   
@@ -973,6 +1016,15 @@ def traceroute(cmd, *circm)
   path_len = $dijkstra.shortest_path_to($local_nodes[dst]).length
   hop_count = 0
   trace_packet = Packet.new
+  if circm.any?
+    path = $circuits[circm[0].to_s]
+    rout_cond = $rout_tbl.has_key?(path[1])
+    next_hop = $rout_tbl[path[1]][0].name
+    trace_packet.header["circ_path"] = path
+  else
+    rout_cond = $rout_tbl.has_key?(dst)
+    next_hop = $rout_tbl[dst][0].name
+  end
   trace_packet.header["dst"] = dst
   trace_packet.header["src"] = $hostname
   trace_packet.header["seq_num"] = 1
@@ -980,8 +1032,7 @@ def traceroute(cmd, *circm)
   trace_packet.header["trace"] = true
   trace_packet.header["sent_time"] = Time.now
   trace_packet.header["path_length"] = path_len
-  if $rout_tbl.has_key?(dst)
-    next_hop = $rout_tbl[dst][0].name
+  if rout_cond
     to_send = "MSG" + "\t" + "#{trace_packet.to_json}" + "\n"
     $connections[next_hop].puts to_send
     $trace_buffer[hop_count] = "0 " + "#{$hostname}" + " 0"
@@ -999,7 +1050,6 @@ def traceroute(cmd, *circm)
 
   else
     STDOUT.puts "ERROR: No path"
-  end
   end
 end
 
