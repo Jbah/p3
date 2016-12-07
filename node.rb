@@ -123,7 +123,7 @@ def queue_loop()
           arr = line.split("\t")
           packet = Packet.new
           packet.from_json! arr.last
-          puts packet.to_json
+          #puts packet.to_json
           dst = packet.header["dst"]
           src = packet.header["src"]
           if packet.header["trace"] == true
