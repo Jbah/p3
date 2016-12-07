@@ -212,6 +212,50 @@ def queue_loop()
                 $connections[next_hop].puts to_send
               end
             end
+
+          #TODO modify this to actually handle ftp
+          elsif packet.header["ftp"]
+            dst = packet.header["dst"]
+            src = packet.header["src"]
+            id = packet.header["ID"]
+            offset = packet.header["offset"]
+            mf = packet.header["mf"]
+            msg = packet.msg
+            to_output = ""
+            if dst == $hostname
+              if mf == false
+                iter = 0
+                while $buffered_packets > 0
+                  if $packet_buffer[iter]
+                    to_output = to_output + $packet_buffer[iter].msg
+                    iter = iter + $maxPayload
+                    $buffered_packets = $buffered_packets - 1
+                  end
+                end
+                to_output = to_output + msg
+                STDOUT.puts "SENDMSG: #{src} --> #{to_output}"
+              else
+                if offset > 0
+                  if $packet_buffer[0].header["ID"] != id
+                    #ID of current packet and buffered packets don't match
+                  end
+                else
+                  $packet_buffer[offset] = packet
+                  $buffered_packets = $buffered_packets + 1
+                end
+              end
+
+            else
+              if $rout_tbl.has_key?(dst)
+                next_hop = $rout_tbl[dst][0].name #next_hop router name
+                to_send = "MSG" + "\t" + "#{packet.to_json}" + "\n"
+                $connections[next_hop].puts to_send
+
+              else
+                send_fail_packet(packet)
+              end
+            end
+          #Start of correct message handling
           else
             
             dst = packet.header["dst"]
@@ -519,7 +563,8 @@ def sendmsg(cmd)
   payload_len = payload.bytesize
   tracker = 0
   offset = 0
-  while payload_len > $maxPayload || err_flag == true
+  #Changed error flag to == false
+  while payload_len > $maxPayload || err_flag == false
     if $rout_tbl.has_key?(cmd[0])
       msg_packet = Packet.new
       msg_packet.header["dst"] = cmd[0] #sets dst header field
@@ -629,7 +674,55 @@ def traceroute(cmd)
 end
 
 def ftp(cmd)
-	STDOUT.puts "FTP: not implemented"
+  #STDOUT.puts "SENDMSG: not implemented"
+  #cmd[0] = DST
+  #cmd[1] = MSG
+  # Open file
+  file = File.open(cmd[1])
+  err_flag = false
+  #payload = cmd[1]
+  payload_len = file.size
+  tracker = 0
+  offset = 0
+  until file.eof? || err_flag == true
+    if $rout_tbl.has_key?(cmd[0])
+      payload = file.read($maxPayload)
+      msg_packet = Packet.new
+      msg_packet.header["dst"] = cmd[0] #sets dst header field
+      msg_packet.header["src"] = $hostname
+      msg_packet.header["len"] = $maxPayload #sets length header field
+      msg_packet.header["ID"] = $ID_counter
+      msg_packet.header["offset"] = offset
+      msg_packet.header["mf"] = true
+      msg_packet.header["ftp"] = true
+      msg_packet.header["ftp_path"] = cmd[2]
+      msg_packet.msg = payload
+      puts msg_packet.msg
+      tracker = tracker + $maxPayload
+      payload_len = payload_len - $maxPayload
+      offset = offset + $maxPayload
+      next_hop = $rout_tbl[cmd[0]][0].name #next_hop router name
+      to_send = "MSG" + "\t" + "#{msg_packet.to_json}" + "\n"
+      $connections[next_hop].puts to_send
+    else
+      STDOUT.puts "SENDMSG ERROR: HOST UNREACHABLE"
+      err_flag = true
+    end
+  end
+  if payload_len > 0
+    msg_packet = Packet.new
+    msg_packet.header["dst"] = cmd[0] #sets dst header field
+    msg_packet.header["src"] = $hostname
+    msg_packet.header["len"] = payload_len #sets length header field
+    msg_packet.header["ID"] = $ID_counter
+    msg_packet.header["offset"] = offset + payload_len
+    msg_packet.header["mf"] = false
+    msg_packet.msg = payload[tracker..payload.bytesize]
+    next_hop = $rout_tbl[cmd[0]][0].name #next_hop router name
+    to_send = "MSG" + "\t" + "#{msg_packet.to_json}" + "\n"
+    $connections[next_hop].puts to_send
+  end
+  $ID_counter = $ID_counter + 1
 end
 
 
