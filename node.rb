@@ -64,6 +64,7 @@ def server_init()
 end
 
 def queue_loop()
+  #TODO IMPORTANT: IF IS FRAGMENT THAT DOESNT MATCH IP CURRENTLY BEING REASSEMBLED PUT BACK ON QUEUE AT ENDSEND
     loop {
       if $queue.length > 0
        # puts "++++++++++++++++++++++"
@@ -202,27 +203,52 @@ def queue_loop()
               end
             end
           elsif packet.header["fail"] == true
-            
-            if dst == $hostname
-              STDOUT.puts "SENDMSG ERROR: HOST UNREACHABLE"
+            if packet.header["ftp"] == true
+              if dst == $hostname
+                STDOUT.puts "FTP ERROR: #{packet.header["ftp_name"]} −− > #{packet.header["src"]} INTERRUPTED AFTER #{packet.header["offset"]*$maxPayload + packet.header["len"]}"
+              else
+                if $rout_tbl.has_key?(dst)
+                  next_hop = $rout_tbl[dst][0].name #next_hop router name
+                  to_send = "MSG" + "\t" + "#{packet.to_json}" + "\n"
+                  $connections[next_hop].puts to_send
+                end
+              end
+
             else
-              if $rout_tbl.has_key?(dst)
-                next_hop = $rout_tbl[dst][0].name #next_hop router name
-                to_send = "MSG" + "\t" + "#{packet.to_json}" + "\n"
-                $connections[next_hop].puts to_send
+              if dst == $hostname
+                STDOUT.puts "SENDMSG ERROR: HOST UNREACHABLE"
+              else
+                if $rout_tbl.has_key?(dst)
+                  next_hop = $rout_tbl[dst][0].name #next_hop router name
+                  to_send = "MSG" + "\t" + "#{packet.to_json}" + "\n"
+                  $connections[next_hop].puts to_send
+                end
               end
             end
 
           #TODO modify this to actually handle ftp
           elsif packet.header["ftp"]
+            #puts "START FTP"
             dst = packet.header["dst"]
             src = packet.header["src"]
             id = packet.header["ID"]
+            #puts "START FTP1"
             offset = packet.header["offset"]
             mf = packet.header["mf"]
+            #puts "START FTP2"
+            f_path = packet.header["ftp_path"]
+            #puts "START FTP3"
+            f_name = packet.header["ftp_name"]
+
+            #puts f_path + "/" + f_name
+            s = f_path + "/" + f_name
+            file = File.open(s,'w')
+            #puts "START FTP4"
             msg = packet.msg
+            #puts "START FTP5"
             to_output = ""
             if dst == $hostname
+              #puts "AT HOST"
               if mf == false
                 iter = 0
                 while $buffered_packets > 0
@@ -233,12 +259,16 @@ def queue_loop()
                   end
                 end
                 to_output = to_output + msg
-                STDOUT.puts "SENDMSG: #{src} --> #{to_output}"
+                file.write(to_output)
+                file.close()
+
               else
                 if offset > 0
                   if $packet_buffer[0].header["ID"] != id
                     #ID of current packet and buffered packets don't match
                   end
+                  $packet_buffer[offset] = packet
+                  $buffered_packets = $buffered_packets + 1
                 else
                   $packet_buffer[offset] = packet
                   $buffered_packets = $buffered_packets + 1
@@ -252,7 +282,7 @@ def queue_loop()
                 $connections[next_hop].puts to_send
 
               else
-                send_fail_packet(packet)
+                send_fail_ftp_packet(packet)
               end
             end
           #Start of correct message handling
@@ -282,9 +312,11 @@ def queue_loop()
                   if $packet_buffer[0].header["ID"] != id
                     #ID of current packet and buffered packets don't match
                   end
+                  $packet_buffer[offset] = packet
+                  $buffered_packets = $buffered_packets + 1
                 else
                   $packet_buffer[offset] = packet
-                  $buffered_packets = $buffered_packets + 1 
+                  $buffered_packets = $buffered_packets + 1
                 end
               end
             
@@ -553,6 +585,20 @@ def send_fail_packet(packet)
   end
 end
 
+def send_fail_ftp_packet(packet)
+  STDOUT.puts "FTP ERROR: #{packet.header["src"]} −− > #{packet.header["ftp_path"]}/#{packet.header["ftp_name"]}"
+  # fail_packet = Packet.new
+  packet.header["dst"] = packet.header["src"]
+  packet.header["src"] = $hostname
+  # fail_packet.header["fail"] = true
+  # fail_packet.header["ftp"] = true
+  packet.header["fail"] = true
+  if $connections.has_key?(packet.header["src"])
+    to_send = "MSG" + "\t" + "#{packet.to_json}" + "\n"
+    $connections[packet.header["src"]].puts to_send
+  end
+end
+
 
 def sendmsg(cmd)
   #STDOUT.puts "SENDMSG: not implemented"
@@ -563,8 +609,8 @@ def sendmsg(cmd)
   payload_len = payload.bytesize
   tracker = 0
   offset = 0
-  #Changed error flag to == false
-  while payload_len > $maxPayload || err_flag == false
+  #TODO check if err_flag logic is correct
+  while payload_len > $maxPayload || err_flag == true
     if $rout_tbl.has_key?(cmd[0])
       msg_packet = Packet.new
       msg_packet.header["dst"] = cmd[0] #sets dst header field
@@ -679,49 +725,63 @@ def ftp(cmd)
   #cmd[1] = MSG
   # Open file
   file = File.open(cmd[1])
-  err_flag = false
-  #payload = cmd[1]
-  payload_len = file.size
-  tracker = 0
-  offset = 0
-  until file.eof? || err_flag == true
-    if $rout_tbl.has_key?(cmd[0])
-      payload = file.read($maxPayload)
-      msg_packet = Packet.new
-      msg_packet.header["dst"] = cmd[0] #sets dst header field
-      msg_packet.header["src"] = $hostname
-      msg_packet.header["len"] = $maxPayload #sets length header field
-      msg_packet.header["ID"] = $ID_counter
-      msg_packet.header["offset"] = offset
-      msg_packet.header["mf"] = true
-      msg_packet.header["ftp"] = true
-      msg_packet.header["ftp_path"] = cmd[2]
-      msg_packet.msg = payload
-      puts msg_packet.msg
-      tracker = tracker + $maxPayload
-      payload_len = payload_len - $maxPayload
-      offset = offset + $maxPayload
-      next_hop = $rout_tbl[cmd[0]][0].name #next_hop router name
-      to_send = "MSG" + "\t" + "#{msg_packet.to_json}" + "\n"
-      $connections[next_hop].puts to_send
-    else
-      STDOUT.puts "SENDMSG ERROR: HOST UNREACHABLE"
-      err_flag = true
+    err_flag = false
+    #payload = cmd[1]
+    payload_len = file.size
+    tracker = 0
+    offset = 0
+    count = 0
+    until file.eof? || err_flag == true
+
+      if $rout_tbl.has_key?(cmd[0])
+        count += 1
+        payload = file.read($maxPayload)
+        msg_packet = Packet.new
+        msg_packet.header["dst"] = cmd[0] #sets dst header field
+        msg_packet.header["src"] = $hostname
+        msg_packet.header["ID"] = $ID_counter
+        msg_packet.header["offset"] = offset
+
+        #Figure out if at end of the file or not.
+        mf = true
+        if payload_len % $maxPayload != 0
+          mf = (payload.bytesize == $maxPayload)
+        elsif count == payload_len / $maxPayload
+          mf = false
+        end
+        msg_packet.header["len"] = payload.bytesize
+        msg_packet.header["mf"] = mf
+        msg_packet.header["ftp"] = true
+        msg_packet.header["ftp_path"] = cmd[2]
+        msg_packet.header["ftp_name"] = cmd[1]
+        msg_packet.msg = payload
+        offset = offset + payload.bytesize
+        next_hop = $rout_tbl[cmd[0]][0].name #next_hop router name
+        to_send = "MSG" + "\t" + "#{msg_packet.to_json}" + "\n"
+        $connections[next_hop].puts to_send
+
+      else
+        STDOUT.puts "SENDMSG ERROR: HOST UNREACHABLE"
+        err_flag = true
+      end
     end
+  if err_flag == true
+
   end
-  if payload_len > 0
-    msg_packet = Packet.new
-    msg_packet.header["dst"] = cmd[0] #sets dst header field
-    msg_packet.header["src"] = $hostname
-    msg_packet.header["len"] = payload_len #sets length header field
-    msg_packet.header["ID"] = $ID_counter
-    msg_packet.header["offset"] = offset + payload_len
-    msg_packet.header["mf"] = false
-    msg_packet.msg = payload[tracker..payload.bytesize]
-    next_hop = $rout_tbl[cmd[0]][0].name #next_hop router name
-    to_send = "MSG" + "\t" + "#{msg_packet.to_json}" + "\n"
-    $connections[next_hop].puts to_send
-  end
+  file.close
+  # if payload_len > 0
+  #   msg_packet = Packet.new
+  #   msg_packet.header["dst"] = cmd[0] #sets dst header field
+  #   msg_packet.header["src"] = $hostname
+  #   msg_packet.header["len"] = payload_len #sets length header field
+  #   msg_packet.header["ID"] = $ID_counter
+  #   msg_packet.header["offset"] = offset + payload_len
+  #   msg_packet.header["mf"] = false
+  #   msg_packet.msg = payload[tracker..payload.bytesize]
+  #   next_hop = $rout_tbl[cmd[0]][0].name #next_hop router name
+  #   to_send = "MSG" + "\t" + "#{msg_packet.to_json}" + "\n"
+  #   $connections[next_hop].puts to_send
+  # end
   $ID_counter = $ID_counter + 1
 end
 
@@ -733,6 +793,22 @@ def main()
   while(line = STDIN.gets())
     if line.include? "check"
       puts $rout_tbl
+    end
+    if line.include? "ftp2"
+      line = "FTP n2 test_ftp /mnt/hgfs/p3/dest\n"
+      line = line.strip()
+      arr = line.split(' ')
+      cmd = arr[0]
+      args = arr[1..-1]
+      ftp(args)
+    end
+    if line.include? "ftp3"
+      line = "FTP n3 test_ftp /mnt/hgfs/p3/dest\n"
+      line = line.strip()
+      arr = line.split(' ')
+      cmd = arr[0]
+      args = arr[1..-1]
+      ftp(args)
     end
     if line.include? "test"
       if $hostname == "n1"
