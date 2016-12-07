@@ -775,7 +775,7 @@ def send_fail_ftp_packet(packet)
 end
 
 
-def sendmsg(cmd)
+def sendmsg(cmd, *circm)
   #STDOUT.puts "SENDMSG: not implemented"
   #cmd[0] = DST
   #cmd[1] = MSG
@@ -835,7 +835,7 @@ def check_ping_timeout(seq_id)
   end
 end
 
-def ping(cmd)
+def ping(cmd, *circm)
   #STDOUT.puts "PING: not implemented"
   #cmd[0] = DST
   #cmd[1] = NUMPINGS
@@ -909,7 +909,7 @@ def check_trace_timeout(hop_count)
 end
 
 
-def traceroute(cmd)
+def traceroute(cmd, *circm)
   # STDOUT.puts "TRACEROUTE: not implemented"
   # cmd[0] = dst
   
@@ -947,7 +947,7 @@ def traceroute(cmd)
   
 end
 
-def ftp(cmd)
+def ftp(cmd, *circm)
   #STDOUT.puts "SENDMSG: not implemented"
   #cmd[0] = DST
   #cmd[1] = MSG
@@ -1045,7 +1045,30 @@ end
 
 def circuitm(cmd)
   #STDOUT.puts "CIRCUITM not implemented"
-
+  #cmd[0] = CIRCUITID
+  #cmd[1] = MSG(SENDMSG, PING, etc.)
+  cmd_send = []
+  puts cmd[0]
+  if cmd[1] == "SENDMSG"
+    cmd_send.push(cmd[1])
+    cmd_send.push(cmd[2])
+    puts cmd_send
+  elsif cmd[0] == "PING"
+    cmd_send.push(cmd[1])
+    cmd_send.push(cmd[2])
+    cmd_send.push(cmd[3])
+    puts cmd_send
+  elsif cmd[0] == "TRACEROUTE"
+    cmd_send.push(cmd[1])
+    puts cmd_send
+  elsif cmd[0] == "FTP"
+    cmd_send.push(cmd[1])
+    cmd_send.push(cmd[2])
+    cmd_send.push(cmd[3])
+    puts cmd_send
+  else
+    STDOUT.puts "INVALID MSG TYPE"
+  end
 
 end
 
