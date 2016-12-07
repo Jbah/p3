@@ -123,6 +123,7 @@ def queue_loop()
           arr = line.split("\t")
           packet = Packet.new
           packet.from_json! arr.last
+          puts packet.to_json
           dst = packet.header["dst"]
           src = packet.header["src"]
           if packet.header["trace"] == true
@@ -234,8 +235,16 @@ def queue_loop()
               if dst == $hostname
                 STDOUT.puts "SENDMSG ERROR: HOST UNREACHABLE"
               else
-                if $rout_tbl.has_key?(dst)
-                  next_hop = $rout_tbl[dst][0].name #next_hop router name
+                if packet.header["circ_path"] != nil
+                  path = packet.header["circ_path"]
+                  next_node = path[path.index($hostname)+1]
+                  rout_cond = $rout_tbl.has_key?(next_node)
+                  next_hop = $rout_tbl[next_node][0].name
+                else
+                  rout_cond = $rout_tbl.has_key?(dst)
+                  next_hop = $rout_tbl[dst][0].name 
+                end
+                if rout_cond
                   to_send = "MSG" + "\t" + "#{packet.to_json}" + "\n"
                   $connections[next_hop].puts to_send
                 end
@@ -302,6 +311,7 @@ def queue_loop()
               end
             end
           #Start of correct message handling
+         #SENDMSG
           else
             
             dst = packet.header["dst"]
@@ -337,8 +347,16 @@ def queue_loop()
               end
             
             else
-              if $rout_tbl.has_key?(dst)
-                next_hop = $rout_tbl[dst][0].name #next_hop router name
+              if packet.header["circ_path"] != nil
+                path = packet.header["circ_path"]
+                next_node = path[path.index($hostname)+1]
+                rout_cond = $rout_tbl.has_key?(next_node)
+                next_hop = $rout_tbl[next_node][0].name
+              else
+                rout_cond = $rout_tbl.has_key?(dst)
+                next_hop = $rout_tbl[dst][0].name 
+              end
+              if rout_cond
                 to_send = "MSG" + "\t" + "#{packet.to_json}" + "\n"
                 $connections[next_hop].puts to_send
                 
@@ -754,9 +772,18 @@ def send_fail_packet(packet)
   fail_packet.header["dst"] = packet.header["src"]
   fail_packet.header["src"] = $hostname
   fail_packet.header["fail"] = true
-  if $connections.has_key?(packet.header["src"])
+  if packet.header["circ_path"] != nil
+    path = packet.header["circ_path"]
+    next_node = path[path.index($hostname)-1]
+    rout_cond = $rout_tbl.has_key?(next_node)
+    next_hop = $rout_tbl[next_node][0].name
+  else
+    rout_cond = $rout_tbl.has_key?(packet.header["src"])
+    next_hop = $rout_tbl[packet.header["src"]][0].name 
+  end
+  if rout_cond
     to_send = "MSG" + "\t" + "#{fail_packet.to_json}" + "\n"
-    $connections[packet.header["src"]].puts to_send
+    $connections[next_hop].puts to_send
   end
 end
 
@@ -776,41 +803,61 @@ end
 
 
 def sendmsg(cmd, *circm)
-  if circm.any?
+  
     
-  else
-    #STDOUT.puts "SENDMSG: not implemented"
-    #cmd[0] = DST
-    #cmd[1] = MSG
-    err_flag = false
-    payload = cmd[1]
-    payload_len = payload.bytesize
-    tracker = 0
-    offset = 0
-    #TODO check if err_flag logic is correct
-    while payload_len > $maxPayload || err_flag == true
-      if $rout_tbl.has_key?(cmd[0])
-        msg_packet = Packet.new
-        msg_packet.header["dst"] = cmd[0] #sets dst header field
-        msg_packet.header["src"] = $hostname
-        msg_packet.header["len"] = $maxPayload #sets length header field
-        msg_packet.header["ID"] = $ID_counter
-        msg_packet.header["offset"] = offset
-        msg_packet.header["mf"] = true
-        msg_packet.msg = payload[tracker..(tracker + $maxPayload - 1)]
-        puts msg_packet.msg
-        tracker = tracker + $maxPayload
-        payload_len = payload_len - $maxPayload
-        offset = offset + $maxPayload
-        next_hop = $rout_tbl[cmd[0]][0].name #next_hop router name
-        to_send = "MSG" + "\t" + "#{msg_packet.to_json}" + "\n"
-        $connections[next_hop].puts to_send
-      else
-        STDOUT.puts "SENDMSG ERROR: HOST UNREACHABLE"
-        err_flag = true
-      end
+  #STDOUT.puts "SENDMSG: not implemented"
+  #cmd[0] = DST
+  #cmd[1] = MSG
+  err_flag = false
+  payload = cmd[1]
+  payload_len = payload.bytesize
+  tracker = 0
+  offset = 0
+  puts $rout_tbl
+  #TODO check if err_flag logic is correct
+  while payload_len > $maxPayload || err_flag == true
+    msg_packet = Packet.new
+    if circm.any?
+      path = $circuits[circm[0].to_s]
+      rout_cond = $rout_tbl.has_key?(path[1])
+      next_hop = $rout_tbl[path[1]][0].name
+      msg_packet.header["circ_path"] = path
+    else
+      rout_cond = $rout_tbl.has_key?(cmd[0])
+      next_hop = $rout_tbl[cmd[0]][0].name
     end
-    if payload_len > 0
+
+    if rout_cond
+      
+      msg_packet.header["dst"] = cmd[0] #sets dst header field
+      msg_packet.header["src"] = $hostname
+      msg_packet.header["len"] = $maxPayload #sets length header field
+      msg_packet.header["ID"] = $ID_counter
+      msg_packet.header["offset"] = offset
+      msg_packet.header["mf"] = true
+      msg_packet.msg = payload[tracker..(tracker + $maxPayload - 1)]
+      puts msg_packet.msg
+      tracker = tracker + $maxPayload
+      payload_len = payload_len - $maxPayload
+      offset = offset + $maxPayload
+      to_send = "MSG" + "\t" + "#{msg_packet.to_json}" + "\n"
+      $connections[next_hop].puts to_send
+    else
+      STDOUT.puts "SENDMSG ERROR: HOST UNREACHABLE"
+      err_flag = true
+    end
+  end
+  if payload_len > 0
+    if circm.any?
+      path = $circuits[circm[0].to_s]
+      rout_cond = $rout_tbl.has_key?(path[1])
+      next_hop = $rout_tbl[path[1]][0].name
+      msg_packet.header["circ_path"] = path
+    else
+      rout_cond = $rout_tbl.has_key?(cmd[0])
+      next_hop = $rout_tbl[cmd[0]][0].name
+    end
+    if rout_cond
       msg_packet = Packet.new
       msg_packet.header["dst"] = cmd[0] #sets dst header field
       msg_packet.header["src"] = $hostname
@@ -819,12 +866,11 @@ def sendmsg(cmd, *circm)
       msg_packet.header["offset"] = offset + payload_len
       msg_packet.header["mf"] = false
       msg_packet.msg = payload[tracker..payload.bytesize]
-      next_hop = $rout_tbl[cmd[0]][0].name #next_hop router name
       to_send = "MSG" + "\t" + "#{msg_packet.to_json}" + "\n"
       $connections[next_hop].puts to_send
     end
-    $ID_counter = $ID_counter + 1
   end
+  $ID_counter = $ID_counter + 1
 end
 
 def check_ping_timeout(seq_id)
@@ -958,9 +1004,7 @@ def traceroute(cmd, *circm)
 end
 
 def ftp(cmd, *circm)
-  if circm.any?
     
-  else
   #STDOUT.puts "SENDMSG: not implemented"
   #cmd[0] = DST
   #cmd[1] = MSG
@@ -1024,7 +1068,7 @@ def ftp(cmd, *circm)
   #   $connections[next_hop].puts to_send
   # end
   $ID_counter = $ID_counter + 1
-  end
+  
 end
 
 def circuitb(cmd)
