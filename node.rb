@@ -1151,77 +1151,86 @@ def circuitb(cmd)
   # cmd[0] = CIRCUITID
   # cmd[1] = dst
   # cmd[2] = CIRCUIT (list of nodes)
-  if cmd[2] == nil
-    path = []
+  if $circuits[cmd[0]].include? $hostname
+    STDOUT.puts "CIRCUIT ERROR: THIS NODE IS ALREADY PART OF A CIRCUIT WITH THIS ID"
   else
-    path = cmd[2].split(",")
-  end  
-  path.unshift($hostname)
-  path.push(cmd[1])
-  $circuits[cmd[0]] = path
-  $circuit_member.push(cmd[0])
-  circuitb_packet = Packet.new
-  circuitb_packet.header["dst"] = cmd[1]
-  circuitb_packet.header["src"] = $hostname
-  circuitb_packet.header["circ_path"] = path
-  circuitb_packet.header["next_hop"] = path[1]
-  circuitb_packet.header["circ_id"] = cmd[0]
-  if $rout_tbl.has_key?(path[1])
-    next_hop = $rout_tbl[path[1]][0].name
-    to_send = "CIRCUITB" + "\t" + "#{circuitb_packet.to_json}" + "\n"
-    $connections[next_hop].puts to_send
-  else
-    STDOUT.puts "CIRCUIT ERROR: #{$hostname} -/-> #{cmd[1]} at #{path[1]}"
+    if cmd[2] == nil
+      path = []
+    else
+      path = cmd[2].split(",")
+    end  
+    path.unshift($hostname)
+    path.push(cmd[1])
+    $circuits[cmd[0]] = path
+    $circuit_member.push(cmd[0])
+    circuitb_packet = Packet.new
+    circuitb_packet.header["dst"] = cmd[1]
+    circuitb_packet.header["src"] = $hostname
+    circuitb_packet.header["circ_path"] = path
+    circuitb_packet.header["next_hop"] = path[1]
+    circuitb_packet.header["circ_id"] = cmd[0]
+    if $rout_tbl.has_key?(path[1])
+      next_hop = $rout_tbl[path[1]][0].name
+      to_send = "CIRCUITB" + "\t" + "#{circuitb_packet.to_json}" + "\n"
+      $connections[next_hop].puts to_send
+    else
+      STDOUT.puts "CIRCUIT ERROR: #{$hostname} -/-> #{cmd[1]} at #{path[1]}"
+    end
   end
-
 end
 
 def circuitm(cmd)
   #STDOUT.puts "CIRCUITM not implemented"
   #cmd[0] = CIRCUITID
   #cmd[1] = MSG(SENDMSG, PING, etc.)
-  cmd_send = []
-  if cmd[1] == "SENDMSG"
-    cmd_send.push(cmd[2])
-    cmd_send.push(cmd[3])
-    sendmsg(cmd_send,cmd[0])
-  elsif cmd[1] == "PING"
-    cmd_send.push(cmd[2])
-    cmd_send.push(cmd[3])
-    cmd_send.push(cmd[4])
-    ping(cmd_send,cmd[0])
-  elsif cmd[1] == "TRACEROUTE"
-    cmd_send.push(cmd[2])
-    traceroute(cmd_send,cmd[0])
-  elsif cmd[1] == "FTP"
-    cmd_send.push(cmd[2])
-    cmd_send.push(cmd[3])
-    cmd_send.push(cmd[4])
-    ftp(cmd_send,cmd[0])
+  if $circuits[cmd[0]][0] != $hostname
+      STDOUT.puts "CIRCUIT ERROR: THIS NODE IS NOT THE START OF THE CIRCUIT"
   else
-    STDOUT.puts "INVALID MSG TYPE"
+    cmd_send = []
+    if cmd[1] == "SENDMSG"
+      cmd_send.push(cmd[2])
+      cmd_send.push(cmd[3])
+      sendmsg(cmd_send,cmd[0])
+    elsif cmd[1] == "PING"
+      cmd_send.push(cmd[2])
+      cmd_send.push(cmd[3])
+      cmd_send.push(cmd[4])
+      ping(cmd_send,cmd[0])
+    elsif cmd[1] == "TRACEROUTE"
+      cmd_send.push(cmd[2])
+      traceroute(cmd_send,cmd[0])
+    elsif cmd[1] == "FTP"
+      cmd_send.push(cmd[2])
+      cmd_send.push(cmd[3])
+      cmd_send.push(cmd[4])
+      ftp(cmd_send,cmd[0])
+    else
+      STDOUT.puts "INVALID MSG TYPE"
+    end
   end
-
 end
 
 def circuitd(cmd)
   #STDOUT.puts "CIRCUITD not implemented"
   #cmd[0] = CIRCUITID
-  path = $circuits[cmd[0]]
-  circuitd_packet = Packet.new
-  circuitd_packet.header["dst"] = path.last
-  circuitd_packet.header["src"] = $hostname
-  circuitd_packet.header["circ_path"] = path
-  circuitd_packet.header["next_hop"] = path[1]
-  circuitd_packet.header["circ_id"] = cmd[0]
-  if $rout_tbl.has_key?(path[1])
-    next_hop = $rout_tbl[path[1]][0].name
-    to_send = "CIRCUITD" + "\t" + "#{circuitd_packet.to_json}" + "\n"
-    $connections[next_hop].puts to_send
+  if $circuits[cmd[0]][0] != $hostname
+    STDOUT.puts "CIRCUIT ERROR: THIS NODE IS NOT THE START OF THE CIRCUIT"
   else
-    STDOUT.puts "CIRCUIT ERROR: #{$hostname} -/-> #{cmd[1]} at #{path[1]}"
+    path = $circuits[cmd[0]]
+    circuitd_packet = Packet.new
+    circuitd_packet.header["dst"] = path.last
+    circuitd_packet.header["src"] = $hostname
+    circuitd_packet.header["circ_path"] = path
+    circuitd_packet.header["next_hop"] = path[1]
+    circuitd_packet.header["circ_id"] = cmd[0]
+    if $rout_tbl.has_key?(path[1])
+      next_hop = $rout_tbl[path[1]][0].name
+      to_send = "CIRCUITD" + "\t" + "#{circuitd_packet.to_json}" + "\n"
+      $connections[next_hop].puts to_send
+    else
+      STDOUT.puts "CIRCUIT ERROR: #{$hostname} -/-> #{cmd[1]} at #{path[1]}"
+    end
   end
-  
 end
 
 
