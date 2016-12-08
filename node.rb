@@ -344,8 +344,16 @@ def queue_loop()
               end
 
             else
-              if $rout_tbl.has_key?(dst)
-                next_hop = $rout_tbl[dst][0].name #next_hop router name
+              if packet.header["circ_path"] != nil
+                path = packet.header["circ_path"]
+                next_node = path[path.index($hostname)+1]
+                rout_cond = $rout_tbl.has_key?(next_node)
+                next_hop = $rout_tbl[next_node][0].name
+              else
+                rout_cond = $rout_tbl.has_key?(dst)
+                next_hop = $rout_tbl[dst][0].name 
+              end
+              if rout_cond
                 to_send = "MSG" + "\t" + "#{packet.to_json}" + "\n"
                 $connections[next_hop].puts to_send
 
@@ -835,12 +843,22 @@ def send_fail_ftp_packet(packet)
   # fail_packet = Packet.new
   packet.header["dst"] = packet.header["src"]
   packet.header["src"] = $hostname
+  src = packet.header["src"]
   # fail_packet.header["fail"] = true
   # fail_packet.header["ftp"] = true
   packet.header["fail"] = true
-  if $connections.has_key?(packet.header["src"])
+  if packet.header["circ_path"] != nil
+    path = packet.header["circ_path"]
+    next_node = path[path.index($hostname)-1]
+    rout_cond = $rout_tbl.has_key?(next_node)
+    next_hop = $rout_tbl[next_node][0].name
+  else
+    rout_cond = $rout_tbl.has_key?(src)
+    next_hop = $rout_tbl[src][0].name 
+  end
+  if rout_cond
     to_send = "MSG" + "\t" + "#{packet.to_json}" + "\n"
-    $connections[packet.header["src"]].puts to_send
+    $connections[next_hop].puts to_send
   end
 end
 
@@ -1067,8 +1085,16 @@ def ftp(cmd, *circm)
     offset = 0
     count = 0
     until file.eof? || err_flag == true
-
-      if $rout_tbl.has_key?(cmd[0])
+      if circm.any?
+        path = $circuits[circm[0].to_s]
+        rout_cond = $rout_tbl.has_key?(path[1])
+        next_hop = $rout_tbl[path[1]][0].name
+        ping_packet.header["circ_path"] = path
+      else
+        rout_cond = $rout_tbl.has_key?(cmd[0])
+        next_hop = $rout_tbl[cmd[0]][0].name
+      end
+      if rout_cond
         count += 1
         payload = file.read($maxPayload)
         msg_packet = Packet.new
@@ -1091,7 +1117,6 @@ def ftp(cmd, *circm)
         msg_packet.header["ftp_name"] = cmd[1]
         msg_packet.msg = payload
         offset = offset + payload.bytesize
-        next_hop = $rout_tbl[cmd[0]][0].name #next_hop router name
         to_send = "MSG" + "\t" + "#{msg_packet.to_json}" + "\n"
         $connections[next_hop].puts to_send
 
