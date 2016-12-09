@@ -969,26 +969,30 @@ def ping(cmd, *circm)
   end
 
 end
-
 def flush_trace_buffer(trace_num)
   Thread.new do
     printed = false
-    $mutex.synchronize do
-      if $trace_buffer.length == trace_num
-        $trace_buffer.each do |key,value|
-          STDOUT.puts value
+    now = Time.now
+    while true && !printed && Time.now - now <= 5
+      $mutex.synchronize do
+        if $trace_buffer.length == trace_num
+          $trace_buffer.each do |key,value|
+            STDOUT.puts value
+          end
+          $trace_buffer.clear
+          printed = true
         end
-        printed = true
-    end
+      end
     end
     if printed == false
-      sleep $pingTimeout
       $mutex.synchronize do
         counter = 0
         while counter < $trace_buffer.length
           STDOUT.puts $trace_buffer[counter]
           counter = counter + 1
         end
+        $trace_buffer.clear
+        
       end
     end
   end
