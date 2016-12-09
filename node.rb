@@ -127,7 +127,7 @@ def queue_loop()
           packet.from_json! arr.last
          # if packet.msg.length > 0
          #   puts $rout_tbl
-            puts packet.to_json
+         #   puts packet.to_json
          # end
           dst = packet.header["dst"]
           src = packet.header["src"]
