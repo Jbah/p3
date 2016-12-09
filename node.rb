@@ -125,11 +125,7 @@ def queue_loop()
           arr = line.split("\t")
           packet = Packet.new
           packet.from_json! arr.last
-<<<<<<< HEAD
        #   puts packet.to_json
-=======
-          puts packet.to_json
->>>>>>> a6ff7904a7529fd9cdfcc9dfaf3a853f427d1535
           dst = packet.header["dst"]
           src = packet.header["src"]
           if packet.header["trace"] == true
