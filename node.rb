@@ -1191,7 +1191,7 @@ def circuitb(cmd)
     circuitb_packet.header["next_hop"] = path[1]
     circuitb_packet.header["circ_id"] = cmd[0]
     if $rout_tbl.has_key?(path[1])
-      next_hop = $rout_tbl[path[1]][0].name
+      next_hop = $rout_tbl[path[1]][0]
       to_send = "CIRCUITB" + "\t" + "#{circuitb_packet.to_json}" + "\n"
       $connections[next_hop].puts to_send
     else
@@ -1245,7 +1245,7 @@ def circuitd(cmd)
     circuitd_packet.header["next_hop"] = path[1]
     circuitd_packet.header["circ_id"] = cmd[0]
     if $rout_tbl.has_key?(path[1])
-      next_hop = $rout_tbl[path[1]][0].name
+      next_hop = $rout_tbl[path[1]][0]
       to_send = "CIRCUITD" + "\t" + "#{circuitd_packet.to_json}" + "\n"
       $connections[next_hop].puts to_send
     else
