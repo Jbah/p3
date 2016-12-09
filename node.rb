@@ -52,6 +52,8 @@ $queue = []
 
 $threads = []
 
+$ftp_time = Hash.new
+
 # --------------------- Part 0 --------------------- #
 
 def server_init()
@@ -319,70 +321,114 @@ def queue_loop()
             
           #TODO modify this to actually handle ftp
           elsif packet.header["ftp"]
-            #puts "START FTP"
-            dst = packet.header["dst"]
-            src = packet.header["src"]
-            id = packet.header["ID"]
-            #puts "START FTP1"
-            offset = packet.header["offset"]
-            mf = packet.header["mf"]
-            #puts "START FTP2"
-            f_path = packet.header["ftp_path"]
-            #puts "START FTP3"
-            f_name = packet.header["ftp_name"]
-
-            #puts f_path + "/" + f_name
-            s = f_path + "/" + f_name
-            file = File.open(s,'w')
-            #puts "START FTP4"
-            msg = packet.msg
-            #puts "START FTP5"
-            to_output = ""
-            if dst == $hostname
-              #puts "AT HOST"
-              if mf == false
-                iter = 0
-                while $buffered_packets > 0
-                  if $packet_buffer[iter]
-                    to_output = to_output + $packet_buffer[iter].msg
-                    iter = iter + $maxPayload
-                    $buffered_packets = $buffered_packets - 1
-                  end
-                end
-                to_output = to_output + msg
-                file.write(to_output)
-                file.close()
-
+            if packet.header["ack"] == true
+              #puts "FOUND ACK"
+              if packet.header["dst"] == $hostname
+                #puts "AT DEST"
+                $mutex.synchronize do
+                  #puts "got lock"
+                  time = $time - $ftp_time[packet.header["ftp_name"]]
+                  #puts $time
+                  #puts $ftp_time[packet.header["ftp_name"]]
+                  #puts "got time"
+                  size = packet.header["file_size"]
+                  #puts "got size"
+                  speed = (size/time).floor
+                  #puts "found speed"
+                  STDOUT.puts "FTP #{packet.header["ftp_name"]} −− > #{packet.header["src"]} in #{time} at #{speed}"
+              end
               else
-                if offset > 0
-                  if $packet_buffer[0].header["ID"] != id
-                    #ID of current packet and buffered packets don't match
-                  end
-                  $packet_buffer[offset] = packet
-                  $buffered_packets = $buffered_packets + 1
-                else
-                  $packet_buffer[offset] = packet
-                  $buffered_packets = $buffered_packets + 1
+                if $rout_tbl.has_key?(packet.header["dst"])
+                  next_hop = $rout_tbl[packet.header["dst"]][0] #next_hop router name
+                  to_send = "MSG" + "\t" + "#{packet.to_json}" + "\n"
+                  $connections[next_hop].puts to_send
                 end
               end
-
             else
-              next_hop = nil
-              if path != nil
-                next_node = path[path.index($hostname)+1]
-                if $rout_tbl.has_key?(next_node)
-                  next_hop = $rout_tbl[next_node][0]
+              #puts "START FTP"
+              dst = packet.header["dst"]
+              src = packet.header["src"]
+              id = packet.header["ID"]
+              #puts "START FTP1"
+              offset = packet.header["offset"]
+              mf = packet.header["mf"]
+              #puts "START FTP2"
+              f_path = packet.header["ftp_path"]
+              #puts "START FTP3"
+              f_name = packet.header["ftp_name"]
+
+              #puts f_path + "/" + f_name
+              s = f_path + "/" + f_name
+              #
+              #puts "START FTP4"
+              msg = packet.msg
+              #puts "START FTP5"
+              to_output = ""
+              if dst == $hostname
+                #puts "AT HOST"
+                file = File.open(s,'w')
+                if mf == false
+                  #puts "LAST PACKET"
+                  iter = 0
+                  while $buffered_packets > 0
+                    # puts $buffered_packets
+                    # puts $packet_buffer[0]
+
+                    if $packet_buffer[iter]
+                      to_output = to_output + $packet_buffer[iter].msg
+                      iter = iter + $maxPayload
+                      $buffered_packets = $buffered_packets - 1
+                    end
+                  end
+                  #puts "EXITED LOOP"
+                  to_output = to_output + msg
+                  file.write(to_output)
+                  file.close()
+                  $buffered_packets = 0
+                  STDOUT.puts "FTP: #{src} −− > #{f_path}/#{f_name}"
+
+                  packet.header["dst"] = src
+                  packet.header["src"] = dst
+                  packet.header["ack"] = true
+                  # Send final ack
+                  if $rout_tbl.has_key?(packet.header["dst"])
+                    next_hop = $rout_tbl[packet.header["dst"]][0] #next_hop router name
+                    to_send = "MSG" + "\t" + "#{packet.to_json}" + "\n"
+                    $connections[next_hop].puts to_send
+                  end
+
+
+                else
+                  if offset > 0
+                    if $packet_buffer[0].header["ID"] != id
+                      #ID of current packet and buffered packets don't match
+                    end
+                    $packet_buffer[offset] = packet
+                    $buffered_packets = $buffered_packets + 1
+                  else
+                    $packet_buffer[offset] = packet
+                    $buffered_packets = $buffered_packets + 1
+                  end
                 end
+
               else
-                if $rout_tbl.has_key?(dst)
-                  next_hop = $rout_tbl[dst][0]
+                next_hop = nil
+                if path != nil
+                  next_node = path[path.index($hostname)+1]
+                  if $rout_tbl.has_key?(next_node)
+                    next_hop = $rout_tbl[next_node][0]
+                  end
+                else
+                  if $rout_tbl.has_key?(dst)
+                    next_hop = $rout_tbl[dst][0]
+                  end
                 end
-              end
-              if next_hop != nil
-                to_send = "MSG" + "\t" + "#{packet.to_json}" + "\n"
-                $connections[next_hop].puts to_send
-              else
-                send_fail_ftp_packet(packet)
+                if next_hop != nil
+                  to_send = "MSG" + "\t" + "#{packet.to_json}" + "\n"
+                  $connections[next_hop].puts to_send
+                else
+                  send_fail_ftp_packet(packet)
+                end
               end
             end
           #Start of correct message handling
@@ -1124,6 +1170,9 @@ def ftp(cmd, *circm)
     tracker = 0
     offset = 0
     count = 0
+    $mutex.synchronize do
+      $ftp_time[cmd[1]] = $time
+    end
     until file.eof? || err_flag == true
       msg_packet = Packet.new
       if circm.any?
@@ -1142,6 +1191,7 @@ def ftp(cmd, *circm)
         msg_packet.header["dst"] = cmd[0] #sets dst header field
         msg_packet.header["src"] = $hostname
         msg_packet.header["ID"] = $ID_counter
+        msg_packet.header["file_size"] = file.size
         msg_packet.header["offset"] = offset
 
         #Figure out if at end of the file or not.
@@ -1170,19 +1220,6 @@ def ftp(cmd, *circm)
 
   end
   file.close
-  # if payload_len > 0
-  #   msg_packet = Packet.new
-  #   msg_packet.header["dst"] = cmd[0] #sets dst header field
-  #   msg_packet.header["src"] = $hostname
-  #   msg_packet.header["len"] = payload_len #sets length header field
-  #   msg_packet.header["ID"] = $ID_counter
-  #   msg_packet.header["offset"] = offset + payload_len
-  #   msg_packet.header["mf"] = false
-  #   msg_packet.msg = payload[tracker..payload.bytesize]
-  #   next_hop = $rout_tbl[cmd[0]][0].name #next_hop router name
-  #   to_send = "MSG" + "\t" + "#{msg_packet.to_json}" + "\n"
-  #   $connections[next_hop].puts to_send
-  # end
   $ID_counter = $ID_counter + 1
   
 end
@@ -1387,8 +1424,12 @@ def setup(hostname, port)
   # Handle time
   $time = Time.now.to_i
   Thread.new do
-    sleep 0.01
-    $time += 0.01
+    loop {
+      sleep 0.01
+      $mutex.synchronize do
+        $time += 0.01
+      end
+    }
   end
   Thread.new do
     
