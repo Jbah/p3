@@ -72,9 +72,9 @@ def queue_loop()
   #TODO IMPORTANT: IF IS FRAGMENT THAT DOESNT MATCH IP CURRENTLY BEING REASSEMBLED PUT BACK ON QUEUE AT ENDSEND
     loop {
       if $queue.length > 0
-        puts "++++++++++++++++++++++"
-        puts $rout_tbl
-        puts $queue
+      #  puts "++++++++++++++++++++++"
+      #  puts $rout_tbl
+      #  puts $queue
         
         line = ""
         $mutex.synchronize do
@@ -147,8 +147,8 @@ def queue_loop()
                 rout_cond = $rout_tbl.has_key?(next_node)
                 next_hop = $rout_tbl[next_node][0]
               else
-                rout_cond = $rout_tbl.has_key?(src)
-                next_hop = $rout_tbl[src][0]
+                rout_cond = $rout_tbl.has_key?(dst)
+                next_hop = $rout_tbl[dst][0]
               end
               if rout_cond
                 to_send = "MSG" + "\t" + "#{packet.to_json}" + "\n"
@@ -669,51 +669,51 @@ def update_topography(link_state_hash, seq_number, sender, mesg)
   #IGNORE UNTIL FURTHER NOTICE#####NOTE THIS WILL NOT WORK IF $rout_tbl does not have entry for this yet.
   ###### $rout_tbl['sender'][2] = seq_number
   # $mutex.synchronize do
-    $seq_number[sender] = seq_number
-
-    # add sender to $local_nodes if not present
+  $seq_number[sender] = seq_number
+  
+  # add sender to $local_nodes if not present
+  $mutex.synchronize do
+    unless $local_nodes.has_key?(sender)
+      $local_nodes[sender] = Node.new(sender)
+      $topography.add_node($local_nodes[sender])
+    end
+  end
+  # update topography
+  link_state_hash.each do |key,value|
     $mutex.synchronize do
-      unless $local_nodes.has_key?(sender)
-        $local_nodes[sender] = Node.new(sender)
-        $topography.add_node($local_nodes[sender])
+      unless $local_nodes.has_key?(key)
+        $local_nodes[key] = Node.new(key)
       end
     end
-    # update topography
-    link_state_hash.each do |key,value|
-      $mutex.synchronize do
-        unless $local_nodes.has_key?(key)
-          $local_nodes[key] = Node.new(key)
-        end
+    $mutex.synchronize do
+      unless $topography.has_node?($local_nodes[key])
+        $topography.add_node($local_nodes[key])
       end
-      $mutex.synchronize do
-        unless $topography.has_node?($local_nodes[key])
-          $topography.add_node($local_nodes[key])
-        end
-        $topography.add_edge($local_nodes[sender],$local_nodes[key],value[1])
-      end
+      $topography.add_edge($local_nodes[sender],$local_nodes[key],value[1])
     end
-    #Remove any edges that have been removed from the network from the local topography
-    edges_l = $topography.get_edges_from_node($local_nodes[sender])
-    edges_r = []
-    link_state_hash.each do |key,value|
-      edges_r.push(Edge.new($local_nodes[sender],$local_nodes[key],0))
-      edges_r.push(Edge.new($local_nodes[key],$local_nodes[sender],0))
+  end
+  #Remove any edges that have been removed from the network from the local topography
+  edges_l = $topography.get_edges_from_node($local_nodes[sender])
+  edges_r = []
+  link_state_hash.each do |key,value|
+    edges_r.push(Edge.new($local_nodes[sender],$local_nodes[key],0))
+    edges_r.push(Edge.new($local_nodes[key],$local_nodes[sender],0))
+  end
+  # puts edges_l[0] == edges_r[1]
+  # puts edges_l
+  # puts edges_r
+  for elt in edges_l
+    if not edges_r.include?(elt)
+      $topography.remove_edge(elt.from,elt.to)
     end
-    # puts edges_l[0] == edges_r[1]
-    # puts edges_l
-    # puts edges_r
-    for elt in edges_l
-      if not edges_r.include?(elt)
-        $topography.remove_edge(elt.from,elt.to)
-      end
-    end
-    # for edge in edges_res
-    #   $topography.remove_edge(edge.from,edge.to)
-    # end
- # end
+  end
+  # for edge in edges_res
+  #   $topography.remove_edge(edge.from,edge.to)
+  # end
+  # end
   send_along_link_state(mesg)
   run_dijkstras
- 
+  
 end
 
 # Pass on link state message rather than create it
@@ -746,21 +746,25 @@ def run_dijkstras()
   
   
   $mutex.synchronize do
+    
     $local_nodes.each do |name, value|
       if name != $hostname && $dijkstra != nil
-        #  puts "Dijkstra edges: #{$dijkstra.graph.edges}"
-        #  puts "Dijkstra source node: #{$dijkstra.source_node}"
-        #  puts "Dijkstra path: #{$dijkstra.path_to}"
-        #  puts "Dijkstra distance: #{$dijkstra.distance_to}"
-        #  puts "Local nodes: #{$local_nodes}"
-        #  puts "Routing Table: #{$rout_tbl}"
+        if $topography.reachable?(value, $local_nodes[$hostname])
+          #  puts "Dijkstra edges: #{$dijkstra.graph.edges}"
+          #  puts "Dijkstra source node: #{$dijkstra.source_node}"
+          #  puts "Dijkstra path: #{$dijkstra.path_to}"
+          #  puts "Dijkstra distance: #{$dijkstra.distance_to}"
+          #  puts "Local nodes: #{$local_nodes}"
+          #  puts "Routing Table: #{$rout_tbl}"
           path = $dijkstra.shortest_path_to(value)
-          $rout_tbl[name] = [path[1].name,$dijkstra.distance_to[value]]
-        #  puts "YES3"
-        
+          if path != nil && path.length > 0
+            $rout_tbl[name] = [path[1].name,$dijkstra.distance_to[value]]
+            #  puts "YES3"
+          end
+        end
       end
     end
-
+    
     end
 #  fd.close
   #end
@@ -972,7 +976,6 @@ def ping(cmd, *circm)
     next_hop = $rout_tbl[path[1]][0]
     ping_packet.header["circ_path"] = path
   else
-    puts "PING: #{$rout_tbl}"
     rout_cond = $rout_tbl.has_key?(dst)
     next_hop = $rout_tbl[dst][0]
   end
