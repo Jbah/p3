@@ -94,6 +94,8 @@ def queue_loop()
           edgeb(arr[1..4],true)
           #end
           #edgeb(arr)
+        elsif line.include? "SHUTDOWN"
+          edged([line.split(" ")[1]])
         elsif line.include? "LINKSTATE"
           #puts "Server recieved linkstate message: "
           arr = line.split("\t")
@@ -129,7 +131,7 @@ def queue_loop()
           packet.from_json! arr.last
          # if packet.msg.length > 0
          #   puts $rout_tbl
-            puts packet.to_json
+         #   puts packet.to_json
          # end
           dst = packet.header["dst"]
           src = packet.header["src"]
@@ -316,8 +318,6 @@ def queue_loop()
                 end 
               end
             end
-            
-          #TODO modify this to actually handle ftp
           elsif packet.header["ftp"]
             if packet.header["ack"] == true
               #puts "FOUND ACK"
@@ -399,7 +399,9 @@ def queue_loop()
                 else
                   if offset > 0
                     if $packet_buffer[0].header["ID"] != id
-                      #ID of current packet and buffered packets don't match
+                      $mutex.synchronize do
+                        $queue.push(line)
+                      end
                     end
                     $packet_buffer[offset] = packet
                     $buffered_packets = $buffered_packets + 1
@@ -455,7 +457,9 @@ def queue_loop()
               else
                 if offset > 0 
                   if $packet_buffer[0].header["ID"] != id
-                    #ID of current packet and buffered packets don't match
+                    $mutex.synchronize do
+                      $queue.push(line)
+                    end
                   end
                   $packet_buffer[offset] = packet
                   $buffered_packets = $buffered_packets + 1
@@ -534,7 +538,7 @@ def queue_loop()
           else
             
             next_node = path[path.index(current_hop) + 1]
-            puts next_node
+            #puts next_node
             if !$circuit_member.include?(id)
               $circuit_member.push(id)
               $circuits[id] = path
@@ -707,6 +711,11 @@ def dumptable(cmd,bool=false)
 end
 
 def shutdown(cmd)
+
+  $connections.each do |key, connection|
+    connection.puts "SHUTDOWN #{$hostname}"
+  end
+
   STDOUT.close
   STDIN.close
   STDERR.close
@@ -870,20 +879,28 @@ end
 
 #Both edged and edgeu need to call send_link_state
 def edged(cmd)
-  puts "DELETE"
-  $topography.remove_edge($local_nodes[$hostname],$local_nodes[cmd[0]])
-  $local_nodes.delete(cmd[0])
-  $rout_tbl.delete(cmd[0])
-  puts $rout_tbl
-  $connections.delete(cmd[0])
-  send_link_state
+  #puts "hello"
+  #puts cmd[0]
+  #puts $nodes[cmd[0]]
+  if $local_nodes.key?(cmd[0])
+    #puts "Delete"
+
+    $topography.remove_edge($local_nodes[$hostname],$local_nodes[cmd[0]])
+    $local_nodes.delete(cmd[0])
+    $rout_tbl.delete(cmd[0])
+    #puts $rout_tbl
+    $connections.delete(cmd[0])
+    send_link_state
+  end
   
 	#STDOUT.puts "EDGED: not implemented"
 end
 
 def edgeu(cmd)
-  $topography.add_edge($local_nodes[$hostname],$local_nodes[cmd[0]],cmd[1].to_i)
-  send_link_state
+  if $local_nodes.key?(cmd[0])
+    $topography.add_edge($local_nodes[$hostname],$local_nodes[cmd[0]],cmd[1].to_i)
+    send_link_state
+  end
   
 	#STDOUT.puts "EDGEU: not implemented"
 end
@@ -1188,6 +1205,7 @@ def ftp(cmd, *circm)
     tracker = 0
     offset = 0
     count = 0
+  next_hop = nil
     $mutex.synchronize do
       $ftp_time[cmd[1]] = $time
     end
@@ -1233,7 +1251,7 @@ def ftp(cmd, *circm)
         $connections[next_hop].puts to_send
 
       else
-        STDOUT.puts "SENDMSG ERROR: HOST UNREACHABLE"
+        STDOUT.puts "FTP ERROR: #{cmd[1]} −− > #{cmd[0]} INTERRUPTED AFTER #{offset}"
         err_flag = true
       end
     end
