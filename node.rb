@@ -125,7 +125,10 @@ def queue_loop()
           arr = line.split("\t")
           packet = Packet.new
           packet.from_json! arr.last
-       #   puts packet.to_json
+         # if packet.msg.length > 0
+         #   puts $rout_tbl
+            puts packet.to_json
+         # end
           dst = packet.header["dst"]
           src = packet.header["src"]
           if packet.header["trace"] == true
@@ -140,17 +143,20 @@ def queue_loop()
               if !$trace_buffer.has_key?(hop_count)
                 $trace_buffer[hop_count] = to_store
               end
-              end
+            end
             elsif packet.header["trace_response"] == true
+              next_hop = nil
               if path != nil
                 next_node = path[path.index($hostname)-1]
-                rout_cond = $rout_tbl.has_key?(next_node)
-                next_hop = $rout_tbl[next_node][0]
+                if $rout_tbl.has_key?(next_node)
+                  next_hop = $rout_tbl[next_node][0]
+                end
               else
-                rout_cond = $rout_tbl.has_key?(dst)
-                next_hop = $rout_tbl[dst][0]
+                if $rout_tbl.has_key?(dst)
+                  next_hop = $rout_tbl[dst][0]
+                end
               end
-              if rout_cond
+              if next_hop != nil
                 to_send = "MSG" + "\t" + "#{packet.to_json}" + "\n"
                 $connections[next_hop].puts to_send
               end
@@ -174,29 +180,34 @@ def queue_loop()
                                time[0].to_i,time[1].to_i,time[2].to_i,
                                zone)
               trace_response.header["sent_time"] = Time.now - sent_time
-              
+              next_hop1 = nil
               if path != nil
                 next_node1 = path[path.index($hostname)-1]
-                rout_cond1 = $rout_tbl.has_key?(next_node1)
-                next_hop1 = $rout_tbl[next_node1][0]
+                if $rout_tbl.has_key?(next_node1)
+                  next_hop1 = $rout_tbl[next_node1][0]
+                end
               else
-                rout_cond1 = $rout_tbl.has_key?(src)
-                next_hop1 = $rout_tbl[src][0]
+                if $rout_tbl.has_key?(src)
+                  next_hop1 = $rout_tbl[src][0]
+                end
               end
-              if rout_cond1
+              if next_hop1 != nil
                 to_send = "MSG" + "\t" + "#{trace_response.to_json}" + "\n"
                 $connections[next_hop1].puts to_send
               end
 
+              next_hop2 = nil
               if path != nil
                 next_node2 = path[path.index($hostname)+1]
-                rout_cond2 = $rout_tbl.has_key?(next_node2)
-                next_hop2 = $rout_tbl[next_node2][0]
+                if $rout_tbl.has_key?(next_node2)
+                  next_hop2 = $rout_tbl[next_node2][0]
+                end
               else
-                rout_cond2 = $rout_tbl.has_key?(dst)
-                next_hop2 = $rout_tbl[dst][0]
+                if $rout_tbl.has_key?(dst) 
+                  next_hop2 = $rout_tbl[dst][0]
+                end
               end
-              if rout_cond2
+              if next_hop2 != nil
                 packet.header["seq_num"] = packet.header["seq_num"] + 1
                 to_send = "MSG" + "\t" + "#{packet.to_json}" + "\n"
                 $connections[next_hop2].puts to_send
@@ -231,36 +242,42 @@ def queue_loop()
               response_ping.header["sent_time"] = packet.header["sent_time"]
               response_ping.header["seq_num"] = packet.header["seq_num"]
               response_ping.header["circ_path"] = path
-
+              
+              next_hop = nil
               if path != nil
-                
                 next_node = path[path.index($hostname)-1]
-                rout_cond = $rout_tbl.has_key?(next_node)
-                next_hop = $rout_tbl[next_node][0]
+                if $rout_tbl.has_key?(next_node)
+                  next_hop = $rout_tbl[next_node][0]
+                end
               else
-                rout_cond = $rout_tbl.has_key?(src)
-                next_hop = $rout_tbl[src][0]
+                if $rout_tbl.has_key?(src)
+                  next_hop = $rout_tbl[src][0]
+                end
               end
-              if rout_cond
+              if next_hop != nil
                 to_send = "MSG" + "\t" + "#{response_ping.to_json}" + "\n"
                 $connections[next_hop].puts to_send
               end
               
             else
               path = packet.header["circ_path"]
+              next_hop = nil
               if dst == packet.header["ping_src"] && path != nil
                 next_node = path[path.index($hostname)-1]
-                rout_cond = $rout_tbl.has_key?(next_node)
-                next_hop = $rout_tbl[next_node][0]
+                if $rout_tbl.has_key?(next_node)
+                  next_hop = $rout_tbl[next_node][0]
+                end
               elsif dst != packet.header["ping_src"] && path != nil
                 next_node = path[path.index($hostname)+1]
-                rout_cond = $rout_tbl.has_key?(next_node)
-                next_hop = $rout_tbl[next_node][0]
+                if $rout_tbl.has_key?(next_node)
+                  next_hop = $rout_tbl[next_node][0]
+                end
               else
-                rout_cond = $rout_tbl.has_key?(dst)
-                next_hop = $rout_tbl[dst][0]
+                if $rout_tbl.has_key?(dst)
+                  next_hop = $rout_tbl[dst][0]
+                end
               end
-              if rout_cond
+              if next_hop != nil
                 to_send = "MSG" + "\t" + "#{packet.to_json}" + "\n"
                 $connections[next_hop].puts to_send
               end
@@ -282,22 +299,24 @@ def queue_loop()
               if dst == $hostname
                 STDOUT.puts "SENDMSG ERROR: HOST UNREACHABLE"
               else
-                if packet.header["circ_path"] != nil
-                  path = packet.header["circ_path"]
-                  next_node = path[path.index($hostname)+1]
-                  rout_cond = $rout_tbl.has_key?(next_node)
-                  next_hop = $rout_tbl[next_node][0]
+                next_hop = nil
+                if path != nil
+                  next_node = path[path.index($hostname)-1]
+                  if $rout_tbl.has_key?(next_node)
+                    next_hop = $rout_tbl[next_node][0]
+                  end
                 else
-                  rout_cond = $rout_tbl.has_key?(dst)
-                  next_hop = $rout_tbl[dst][0]
+                  if $rout_tbl.has_key?(dst)
+                    next_hop = $rout_tbl[dst][0]
+                  end
                 end
-                if rout_cond
+                if next_hop != nil
                   to_send = "MSG" + "\t" + "#{packet.to_json}" + "\n"
                   $connections[next_hop].puts to_send
-                end
+                end 
               end
             end
-
+            
           #TODO modify this to actually handle ftp
           elsif packet.header["ftp"]
             #puts "START FTP"
@@ -348,19 +367,20 @@ def queue_loop()
               end
 
             else
-              if packet.header["circ_path"] != nil
-                path = packet.header["circ_path"]
+              next_hop = nil
+              if path != nil
                 next_node = path[path.index($hostname)+1]
-                rout_cond = $rout_tbl.has_key?(next_node)
-                next_hop = $rout_tbl[next_node][0]
+                if $rout_tbl.has_key?(next_node)
+                  next_hop = $rout_tbl[next_node][0]
+                end
               else
-                rout_cond = $rout_tbl.has_key?(dst)
-                next_hop = $rout_tbl[dst][0]
+                if $rout_tbl.has_key?(dst)
+                  next_hop = $rout_tbl[dst][0]
+                end
               end
-              if rout_cond
+              if next_hop != nil
                 to_send = "MSG" + "\t" + "#{packet.to_json}" + "\n"
                 $connections[next_hop].puts to_send
-
               else
                 send_fail_ftp_packet(packet)
               end
@@ -402,19 +422,21 @@ def queue_loop()
               end
             
             else
-              if packet.header["circ_path"] != nil
-                path = packet.header["circ_path"]
+              next_hop = nil
+              if path != nil
                 next_node = path[path.index($hostname)+1]
-                rout_cond = $rout_tbl.has_key?(next_node)
-                next_hop = $rout_tbl[next_node][0]
+                if $rout_tbl.has_key?(next_node)
+                  next_hop = $rout_tbl[next_node][0]
+                end
               else
-                rout_cond = $rout_tbl.has_key?(dst)
-                next_hop = $rout_tbl[dst][0] 
+                if $rout_tbl.has_key?(dst)
+                  next_hop = $rout_tbl[dst][0]
+                end
               end
-              if rout_cond
+              if next_hop != nil
                 to_send = "MSG" + "\t" + "#{packet.to_json}" + "\n"
                 $connections[next_hop].puts to_send
-                
+            
               else
                 send_fail_packet(packet)
               end
@@ -922,6 +944,7 @@ def sendmsg(cmd, *circm)
       err_flag = true
     end
   end
+  msg_packet = Packet.new
   if payload_len > 0
     if circm.any?
       path = $circuits[circm[0].to_s]
@@ -933,12 +956,12 @@ def sendmsg(cmd, *circm)
       next_hop = $rout_tbl[cmd[0]][0]
     end
     if rout_cond
-      msg_packet = Packet.new
+     
       msg_packet.header["dst"] = cmd[0] #sets dst header field
       msg_packet.header["src"] = $hostname
       msg_packet.header["len"] = payload_len #sets length header field
       msg_packet.header["ID"] = $ID_counter
-      msg_packet.header["offset"] = offset + payload_len
+      msg_packet.header["offset"] = offset
       msg_packet.header["mf"] = false
       msg_packet.msg = payload[tracker..payload.bytesize]
       to_send = "MSG" + "\t" + "#{msg_packet.to_json}" + "\n"
@@ -1102,6 +1125,7 @@ def ftp(cmd, *circm)
     offset = 0
     count = 0
     until file.eof? || err_flag == true
+      msg_packet = Packet.new
       if circm.any?
         path = $circuits[circm[0].to_s]
         rout_cond = $rout_tbl.has_key?(path[1])
@@ -1114,7 +1138,7 @@ def ftp(cmd, *circm)
       if rout_cond
         count += 1
         payload = file.read($maxPayload)
-        msg_packet = Packet.new
+        
         msg_packet.header["dst"] = cmd[0] #sets dst header field
         msg_packet.header["src"] = $hostname
         msg_packet.header["ID"] = $ID_counter
@@ -1168,7 +1192,8 @@ def circuitb(cmd)
   # cmd[0] = CIRCUITID
   # cmd[1] = dst
   # cmd[2] = CIRCUIT (list of nodes)
-  if $circuits[cmd[0]].include? $hostname
+
+  if $circuits[cmd[0]] != nil && $circuits[cmd[0]].include?($hostname)
     STDOUT.puts "CIRCUIT ERROR: THIS NODE IS ALREADY PART OF A CIRCUIT WITH THIS ID"
   else
     if cmd[2] == nil
@@ -1200,7 +1225,7 @@ def circuitm(cmd)
   #STDOUT.puts "CIRCUITM not implemented"
   #cmd[0] = CIRCUITID
   #cmd[1] = MSG(SENDMSG, PING, etc.)
-  if $circuits[cmd[0]][0] != $hostname
+  if $circuits[cmd[0]] != nil && $circuits[cmd[0]][0] != $hostname
       STDOUT.puts "CIRCUIT ERROR: THIS NODE IS NOT THE START OF THE CIRCUIT"
   else
     cmd_send = []
@@ -1230,7 +1255,7 @@ end
 def circuitd(cmd)
   #STDOUT.puts "CIRCUITD not implemented"
   #cmd[0] = CIRCUITID
-  if $circuits[cmd[0]][0] != $hostname
+  if $circuits[cmd[0]] != nil && $circuits[cmd[0]][0] != $hostname
     STDOUT.puts "CIRCUIT ERROR: THIS NODE IS NOT THE START OF THE CIRCUIT"
   else
     path = $circuits[cmd[0]]
