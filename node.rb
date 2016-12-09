@@ -72,8 +72,10 @@ def queue_loop()
   #TODO IMPORTANT: IF IS FRAGMENT THAT DOESNT MATCH IP CURRENTLY BEING REASSEMBLED PUT BACK ON QUEUE AT ENDSEND
     loop {
       if $queue.length > 0
-       # puts "++++++++++++++++++++++"
-       # puts $queue
+        puts "++++++++++++++++++++++"
+        puts $rout_tbl
+        puts $queue
+        
         line = ""
         $mutex.synchronize do
           line = $queue.shift
@@ -86,7 +88,7 @@ def queue_loop()
           line = (line + " 1\n").strip()
           arr = line.split(' ')
           #puts arr[1..4]
-          #$mutex.synchronize do
+          # $mutex.synchronize do
           edgeb(arr[1..4],true)
           #end
           #edgeb(arr)
@@ -123,7 +125,7 @@ def queue_loop()
           arr = line.split("\t")
           packet = Packet.new
           packet.from_json! arr.last
-          #puts packet.to_json
+          puts packet.to_json
           dst = packet.header["dst"]
           src = packet.header["src"]
           if packet.header["trace"] == true
@@ -143,10 +145,10 @@ def queue_loop()
               if path != nil
                 next_node = path[path.index($hostname)-1]
                 rout_cond = $rout_tbl.has_key?(next_node)
-                next_hop = $rout_tbl[next_node][0].name
+                next_hop = $rout_tbl[next_node][0]
               else
                 rout_cond = $rout_tbl.has_key?(src)
-                next_hop = $rout_tbl[src][0].name 
+                next_hop = $rout_tbl[src][0]
               end
               if rout_cond
                 to_send = "MSG" + "\t" + "#{packet.to_json}" + "\n"
@@ -176,10 +178,10 @@ def queue_loop()
               if path != nil
                 next_node1 = path[path.index($hostname)-1]
                 rout_cond1 = $rout_tbl.has_key?(next_node1)
-                next_hop1 = $rout_tbl[next_node1][0].name
+                next_hop1 = $rout_tbl[next_node1][0]
               else
                 rout_cond1 = $rout_tbl.has_key?(src)
-                next_hop1 = $rout_tbl[src][0].name 
+                next_hop1 = $rout_tbl[src][0]
               end
               if rout_cond1
                 to_send = "MSG" + "\t" + "#{trace_response.to_json}" + "\n"
@@ -189,12 +191,12 @@ def queue_loop()
               if path != nil
                 next_node2 = path[path.index($hostname)+1]
                 rout_cond2 = $rout_tbl.has_key?(next_node2)
-                next_hop2 = $rout_tbl[next_node2][0].name
+                next_hop2 = $rout_tbl[next_node2][0]
               else
                 rout_cond2 = $rout_tbl.has_key?(dst)
-                next_hop2 = $rout_tbl[dst][0].name 
+                next_hop2 = $rout_tbl[dst][0]
               end
-              if rout_cond
+              if rout_cond2
                 packet.header["seq_num"] = packet.header["seq_num"] + 1
                 to_send = "MSG" + "\t" + "#{packet.to_json}" + "\n"
                 $connections[next_hop2].puts to_send
@@ -202,6 +204,7 @@ def queue_loop()
               
             end
           elsif packet.header["ping"] == true
+            #puts "#{dst} : #{$rout_tbl}"
             #puts "============================"
             if packet.header["ping_src"] == $hostname
               
@@ -233,10 +236,10 @@ def queue_loop()
                 
                 next_node = path[path.index($hostname)-1]
                 rout_cond = $rout_tbl.has_key?(next_node)
-                next_hop = $rout_tbl[next_node][0].name
+                next_hop = $rout_tbl[next_node][0]
               else
                 rout_cond = $rout_tbl.has_key?(src)
-                next_hop = $rout_tbl[src][0].name 
+                next_hop = $rout_tbl[src][0]
               end
               if rout_cond
                 to_send = "MSG" + "\t" + "#{response_ping.to_json}" + "\n"
@@ -248,14 +251,14 @@ def queue_loop()
               if dst == packet.header["ping_src"] && path != nil
                 next_node = path[path.index($hostname)-1]
                 rout_cond = $rout_tbl.has_key?(next_node)
-                next_hop = $rout_tbl[next_node][0].name
+                next_hop = $rout_tbl[next_node][0]
               elsif dst != packet.header["ping_src"] && path != nil
                 next_node = path[path.index($hostname)+1]
                 rout_cond = $rout_tbl.has_key?(next_node)
-                next_hop = $rout_tbl[next_node][0].name
+                next_hop = $rout_tbl[next_node][0]
               else
                 rout_cond = $rout_tbl.has_key?(dst)
-                next_hop = $rout_tbl[dst][0].name 
+                next_hop = $rout_tbl[dst][0]
               end
               if rout_cond
                 to_send = "MSG" + "\t" + "#{packet.to_json}" + "\n"
@@ -268,7 +271,7 @@ def queue_loop()
                 STDOUT.puts "FTP ERROR: #{packet.header["ftp_name"]} −− > #{packet.header["src"]} INTERRUPTED AFTER #{packet.header["offset"]*$maxPayload + packet.header["len"]}"
               else
                 if $rout_tbl.has_key?(dst)
-                  next_hop = $rout_tbl[dst][0].name #next_hop router name
+                  next_hop = $rout_tbl[dst][0] #next_hop router name
                   to_send = "MSG" + "\t" + "#{packet.to_json}" + "\n"
                   $connections[next_hop].puts to_send
                 end
@@ -282,10 +285,10 @@ def queue_loop()
                   path = packet.header["circ_path"]
                   next_node = path[path.index($hostname)+1]
                   rout_cond = $rout_tbl.has_key?(next_node)
-                  next_hop = $rout_tbl[next_node][0].name
+                  next_hop = $rout_tbl[next_node][0]
                 else
                   rout_cond = $rout_tbl.has_key?(dst)
-                  next_hop = $rout_tbl[dst][0].name 
+                  next_hop = $rout_tbl[dst][0]
                 end
                 if rout_cond
                   to_send = "MSG" + "\t" + "#{packet.to_json}" + "\n"
@@ -348,10 +351,10 @@ def queue_loop()
                 path = packet.header["circ_path"]
                 next_node = path[path.index($hostname)+1]
                 rout_cond = $rout_tbl.has_key?(next_node)
-                next_hop = $rout_tbl[next_node][0].name
+                next_hop = $rout_tbl[next_node][0]
               else
                 rout_cond = $rout_tbl.has_key?(dst)
-                next_hop = $rout_tbl[dst][0].name 
+                next_hop = $rout_tbl[dst][0]
               end
               if rout_cond
                 to_send = "MSG" + "\t" + "#{packet.to_json}" + "\n"
@@ -402,10 +405,10 @@ def queue_loop()
                 path = packet.header["circ_path"]
                 next_node = path[path.index($hostname)+1]
                 rout_cond = $rout_tbl.has_key?(next_node)
-                next_hop = $rout_tbl[next_node][0].name
+                next_hop = $rout_tbl[next_node][0]
               else
                 rout_cond = $rout_tbl.has_key?(dst)
-                next_hop = $rout_tbl[dst][0].name 
+                next_hop = $rout_tbl[dst][0] 
               end
               if rout_cond
                 to_send = "MSG" + "\t" + "#{packet.to_json}" + "\n"
@@ -439,7 +442,7 @@ def queue_loop()
               $circuit_member.push(id)
               $circuits[id] = path
               if $rout_tbl.has_key?(src)
-                next_hop = $rout_tbl[src][0].name
+                next_hop = $rout_tbl[src][0]
                 packet.header["dst"] = src
                 packet.header["src"] = $hostname
                 packet.header["circ_success"] = true
@@ -456,7 +459,7 @@ def queue_loop()
             
           elsif packet.header["circ_response"] == true
             if $rout_tbl.has_key?(dst)
-                next_hop = $rout_tbl[dst][0].name
+                next_hop = $rout_tbl[dst][0]
                 to_send = "CIRCUITB" + "\t" + "#{packet.to_json}" + "\n"
                 $connections[next_hop].puts to_send
               end
@@ -469,13 +472,13 @@ def queue_loop()
               $circuit_member.push(id)
               $circuits[id] = path
               if $rout_tbl.has_key?(next_node)
-                next_hop = $rout_tbl[next_node][0].name
+                next_hop = $rout_tbl[next_node][0]
                 packet.header["next_hop"] = next_node
                 to_send = "CIRCUITB" + "\t" + "#{packet.to_json}" + "\n"
                 $connections[next_hop].puts to_send
               else
                 if $rout_tbl.has_key?(src)
-                  next_hop = $rout_tbl[src][0].name
+                  next_hop = $rout_tbl[src][0]
                   packet.header["dst"] = src
                   packet.header["src"] = $hostname
                   packet.header["circ_success"] = false
@@ -497,7 +500,7 @@ def queue_loop()
              # end
             else
               if $rout_tbl.has_key?(src)
-                next_hop = $rout_tbl[src][0].name
+                next_hop = $rout_tbl[src][0]
                 packet.header["dst"] = src
                 packet.header["src"] = $hostname
                 packet.header["circ_response"] = true
@@ -535,7 +538,7 @@ def queue_loop()
               $circuits.delete(id)
               $circuit_member.delete(id)
               if $rout_tbl.has_key?(src)
-                next_hop = $rout_tbl[src][0].name
+                next_hop = $rout_tbl[src][0]
                 packet.header["dst"] = src
                 packet.header["src"] = $hostname
                 packet.header["circ_success"] = true
@@ -547,7 +550,7 @@ def queue_loop()
           end
           elsif packet.header["circ_response"] == true
             if $rout_tbl.has_key?(dst)
-              next_hop = $rout_tbl[dst][0].name
+              next_hop = $rout_tbl[dst][0]
               to_send = "CIRCUITD" + "\t" + "#{packet.to_json}" + "\n"
               $connections[next_hop].puts to_send
             end
@@ -557,13 +560,13 @@ def queue_loop()
               $circuit_member.delete(id)
               $circuits.delete(id)
               if $rout_tbl.has_key?(next_node)
-                next_hop = $rout_tbl[next_node][0].name
+                next_hop = $rout_tbl[next_node][0]
                 packet.header["next_hop"] = next_node
                 to_send = "CIRCUITD" + "\t" + "#{packet.to_json}" + "\n"
                 $connections[next_hop].puts to_send
               else
                 if $rout_tbl.has_key?(src)
-                  next_hop = $rout_tbl[src][0].name
+                  next_hop = $rout_tbl[src][0]
                   packet.header["dst"] = src
                   packet.header["src"] = $hostname
                   packet.header["circ_success"] = false
@@ -664,9 +667,10 @@ def update_topography(link_state_hash, seq_number, sender, mesg)
   #TODO Update routing table
   # Update local sequence number for sender
   #IGNORE UNTIL FURTHER NOTICE#####NOTE THIS WILL NOT WORK IF $rout_tbl does not have entry for this yet.
-  ######$rout_tbl['sender'][2] = seq_number
-  #$mutex.synchronize do
+  ###### $rout_tbl['sender'][2] = seq_number
+  # $mutex.synchronize do
     $seq_number[sender] = seq_number
+
     # add sender to $local_nodes if not present
     $mutex.synchronize do
       unless $local_nodes.has_key?(sender)
@@ -708,9 +712,8 @@ def update_topography(link_state_hash, seq_number, sender, mesg)
     # end
  # end
   send_along_link_state(mesg)
-  # $mutex.synchronize do  
-  run_dijkstras()
-  #end
+  run_dijkstras
+ 
 end
 
 # Pass on link state message rather than create it
@@ -727,28 +730,35 @@ end
 # creates dijkstra object that contains all shortest paths and update routing table
 def run_dijkstras()
  # fd = File.open($hostname + "test", "a")
-    $mutex.synchronize do
+  
     #puts $topography.edges
     
-  #  fd.puts "_________________________________"
-  #  fd.puts $topography.edges
-  #  fd.puts $rout_tbl
-  #  fd.puts $local_nodes[$hostname]
+    #  fd.puts "_________________________________"
+    #  fd.puts $topography.edges
+    #  fd.puts $rout_tbl
+    #  fd.puts $local_nodes[$hostname]
     #fd.puts $local_nodes.keys
     #fd.puts $local_nodes.values
+  $mutex.synchronize do
     $dijkstra = Dijkstra.new($topography, $local_nodes[$hostname])
-  #  fd.puts "Djikstra done\n"
-   
-    
-    end
+  end
+    #  fd.puts "Djikstra done\n"  
+  
+  
   $mutex.synchronize do
     $local_nodes.each do |name, value|
-        if name != $hostname
-          if $dijkstra != nil
-              path = $dijkstra.shortest_path_to(value)
-              $rout_tbl[name] = [$dijkstra.shortest_path_to(value)[1],$dijkstra.distance_to[value]]         
-          end
-        end
+      if name != $hostname && $dijkstra != nil
+        #  puts "Dijkstra edges: #{$dijkstra.graph.edges}"
+        #  puts "Dijkstra source node: #{$dijkstra.source_node}"
+        #  puts "Dijkstra path: #{$dijkstra.path_to}"
+        #  puts "Dijkstra distance: #{$dijkstra.distance_to}"
+        #  puts "Local nodes: #{$local_nodes}"
+        #  puts "Routing Table: #{$rout_tbl}"
+          path = $dijkstra.shortest_path_to(value)
+          $rout_tbl[name] = [path[1].name,$dijkstra.distance_to[value]]
+        #  puts "YES3"
+        
+      end
     end
 
     end
@@ -776,7 +786,7 @@ def send_link_state()
     $mutex.synchronize do
       if $rout_tbl.has_key?(key)
         neighbors[key] = $rout_tbl[key]
-        end
+      end
     end
   end
 
@@ -827,10 +837,10 @@ def send_fail_packet(packet)
     path = packet.header["circ_path"]
     next_node = path[path.index($hostname)-1]
     rout_cond = $rout_tbl.has_key?(next_node)
-    next_hop = $rout_tbl[next_node][0].name
+    next_hop = $rout_tbl[next_node][0]
   else
     rout_cond = $rout_tbl.has_key?(packet.header["src"])
-    next_hop = $rout_tbl[packet.header["src"]][0].name 
+    next_hop = $rout_tbl[packet.header["src"]][0]
   end
   if rout_cond
     to_send = "MSG" + "\t" + "#{fail_packet.to_json}" + "\n"
@@ -851,10 +861,10 @@ def send_fail_ftp_packet(packet)
     path = packet.header["circ_path"]
     next_node = path[path.index($hostname)-1]
     rout_cond = $rout_tbl.has_key?(next_node)
-    next_hop = $rout_tbl[next_node][0].name
+    next_hop = $rout_tbl[next_node][0]
   else
     rout_cond = $rout_tbl.has_key?(src)
-    next_hop = $rout_tbl[src][0].name 
+    next_hop = $rout_tbl[src][0]
   end
   if rout_cond
     to_send = "MSG" + "\t" + "#{packet.to_json}" + "\n"
@@ -881,11 +891,11 @@ def sendmsg(cmd, *circm)
     if circm.any?
       path = $circuits[circm[0].to_s]
       rout_cond = $rout_tbl.has_key?(path[1])
-      next_hop = $rout_tbl[path[1]][0].name
+      next_hop = $rout_tbl[path[1]][0]
       msg_packet.header["circ_path"] = path
     else
       rout_cond = $rout_tbl.has_key?(cmd[0])
-      next_hop = $rout_tbl[cmd[0]][0].name
+      next_hop = $rout_tbl[cmd[0]][0]
     end
 
     if rout_cond
@@ -912,11 +922,11 @@ def sendmsg(cmd, *circm)
     if circm.any?
       path = $circuits[circm[0].to_s]
       rout_cond = $rout_tbl.has_key?(path[1])
-      next_hop = $rout_tbl[path[1]][0].name
+      next_hop = $rout_tbl[path[1]][0]
       msg_packet.header["circ_path"] = path
     else
       rout_cond = $rout_tbl.has_key?(cmd[0])
-      next_hop = $rout_tbl[cmd[0]][0].name
+      next_hop = $rout_tbl[cmd[0]][0]
     end
     if rout_cond
       msg_packet = Packet.new
@@ -959,11 +969,12 @@ def ping(cmd, *circm)
   if circm.any?
     path = $circuits[circm[0].to_s]
     rout_cond = $rout_tbl.has_key?(path[1])
-    next_hop = $rout_tbl[path[1]][0].name
+    next_hop = $rout_tbl[path[1]][0]
     ping_packet.header["circ_path"] = path
   else
-    rout_cond = $rout_tbl.has_key?(cmd[0])
-    next_hop = $rout_tbl[cmd[0]][0].name
+    puts "PING: #{$rout_tbl}"
+    rout_cond = $rout_tbl.has_key?(dst)
+    next_hop = $rout_tbl[dst][0]
   end
   ping_packet.header["dst"] = dst
   ping_packet.header["src"] = $hostname
@@ -1037,11 +1048,11 @@ def traceroute(cmd, *circm)
   if circm.any?
     path = $circuits[circm[0].to_s]
     rout_cond = $rout_tbl.has_key?(path[1])
-    next_hop = $rout_tbl[path[1]][0].name
+    next_hop = $rout_tbl[path[1]][0]
     trace_packet.header["circ_path"] = path
   else
     rout_cond = $rout_tbl.has_key?(dst)
-    next_hop = $rout_tbl[dst][0].name
+    next_hop = $rout_tbl[dst][0]
   end
   trace_packet.header["dst"] = dst
   trace_packet.header["src"] = $hostname
@@ -1088,11 +1099,11 @@ def ftp(cmd, *circm)
       if circm.any?
         path = $circuits[circm[0].to_s]
         rout_cond = $rout_tbl.has_key?(path[1])
-        next_hop = $rout_tbl[path[1]][0].name
+        next_hop = $rout_tbl[path[1]][0]
         ping_packet.header["circ_path"] = path
       else
         rout_cond = $rout_tbl.has_key?(cmd[0])
-        next_hop = $rout_tbl[cmd[0]][0].name
+        next_hop = $rout_tbl[cmd[0]][0]
       end
       if rout_cond
         count += 1
