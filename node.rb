@@ -6,10 +6,10 @@ require 'thread'
 require 'yaml'
 
 #require '/rgl-master/lib/rgl/adjacency'
-require_relative 'dijkstra/dijkstra'
-require_relative 'dijkstra/graph_node'
-require_relative 'dijkstra/edge'
-require_relative 'dijkstra/graph'
+require_relative 'dijkstra'
+require_relative 'graph_node'
+require_relative 'edge'
+require_relative 'graph'
 require_relative 'packet'
 require 'json'
 
@@ -522,7 +522,7 @@ def queue_loop()
                 $connections[next_hop].puts to_send
               end
               STDOUT.puts "CIRCUIT #{src}/#{id} --> #{$hostname} over #{path.length-2}"
-            else
+            else 
             end 
           elsif packet.header["circ_response"] == true
             if $rout_tbl.has_key?(dst)
