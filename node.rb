@@ -523,22 +523,15 @@ def queue_loop()
               end
               STDOUT.puts "CIRCUIT #{src}/#{id} --> #{$hostname} over #{path.length-2}"
             else
-
-              
-            end
-
-            
+            end 
           elsif packet.header["circ_response"] == true
             if $rout_tbl.has_key?(dst)
-                next_hop = $rout_tbl[dst][0]
-                to_send = "CIRCUITB" + "\t" + "#{packet.to_json}" + "\n"
-                $connections[next_hop].puts to_send
-              end
-           
+              next_hop = $rout_tbl[dst][0]
+              to_send = "CIRCUITB" + "\t" + "#{packet.to_json}" + "\n"
+              $connections[next_hop].puts to_send
+            end
           else
-            
             next_node = path[path.index(current_hop) + 1]
-            #puts next_node
             if !$circuit_member.include?(id)
               $circuit_member.push(id)
               $circuits[id] = path
@@ -559,16 +552,6 @@ def queue_loop()
                   $connections[next_hop].puts to_send
                 end
               end
-              
-             # if $rout_tbl.has_key?(src)
-             #   next_hop = $rout_tbl[src][0].name
-             #   packet.header["dst"] = src
-             #   packet.header["src"] = $hostname
-             #   packet.header["circ_success"] = true
-             #   packet.header["circ_response"] = true           
-             #   to_send = "CIRCUITB" + "\t" + "#{packet.to_json}" + "\n"
-              #  $connections[next_hop].puts to_send
-             # end
             else
               if $rout_tbl.has_key?(src)
                 next_hop = $rout_tbl[src][0]
@@ -1292,7 +1275,7 @@ def circuitb(cmd)
       to_send = "CIRCUITB" + "\t" + "#{circuitb_packet.to_json}" + "\n"
       $connections[next_hop].puts to_send
     else
-      STDOUT.puts "CIRCUIT ERROR: #{$hostname} -/-> #{cmd[1]} at #{path[1]}"
+      STDOUT.puts "CIRCUIT ERROR: #{$hostname} -/-> #{cmd[1]} FAILED AT #{path[1]}"
     end
   end
 end
@@ -1346,7 +1329,7 @@ def circuitd(cmd)
       to_send = "CIRCUITD" + "\t" + "#{circuitd_packet.to_json}" + "\n"
       $connections[next_hop].puts to_send
     else
-      STDOUT.puts "CIRCUIT ERROR: #{$hostname} -/-> #{cmd[1]} at #{path[1]}"
+      STDOUT.puts "CIRCUIT ERROR: #{$hostname} -/-> #{cmd[1]} FAILED AT #{path[1]}"
     end
   end
 end
