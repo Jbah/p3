@@ -588,7 +588,7 @@ def queue_loop()
           arr = line.split("\t")
           packet = Packet.new
           packet.from_json! arr.last
-          puts packet.to_json
+         # puts packet.to_json
           dst = packet.header["dst"]
           src = packet.header["src"]
           id = packet.header["circ_id"]
@@ -1003,7 +1003,7 @@ def sendmsg(cmd, *circm)
       msg_packet.header["offset"] = offset
       msg_packet.header["mf"] = true
       msg_packet.msg = payload[tracker..(tracker + $maxPayload - 1)]
-      puts msg_packet.msg
+     # puts msg_packet.msg
       tracker = tracker + $maxPayload
       payload_len = payload_len - $maxPayload
       offset = offset + $maxPayload
